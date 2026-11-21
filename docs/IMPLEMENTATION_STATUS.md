@@ -59,7 +59,17 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 | GPS denied / error states | Built; NOT TESTED physically | |
 | Altitude | Removed: Android altitude is ellipsoidal, not sea level | Needs MSL source |
 | Background tracking | Not built (foreground only, stated in UI) | |
-| Existing SOS / queue / check-in / relay | Preserved (logic files untouched); Safety tab is the old SOS screen in light colours | Redesign = Increment 3 |
+| Existing SOS / queue / check-in / relay | Preserved (`src/lib` logic untouched) | |
+| **Inc 3** Safety screen (hold-to-send, help type + urgency, location/connection warnings, check-in, alarm, Call 112) | PASS (Physical) | Screenshot; uses the same `createSos` → outbox → `syncNow` flow |
+| Quick tap does not send | PASS (Physical) | Gateway message count stayed 0 |
+| Hold 1.5 s sends; status page opens | PASS (Physical) | Gateway stored 1 SOS, GENERAL/LOW, path MOBILE_01→GATEWAY_01, received 0.4 s after creation |
+| SOS status page: truthful steps | PASS (Physical) + Unit | "Reached the safety network / waiting" until ack; `scripts/test-sos-status.mts` |
+| Responder ack reaches the phone (scenario 6, direct over USB) | PASS (Physical) | `POST /gateway/ack` → phone showed "Acknowledged … Test responder (Mac)" within the 3 s poll |
+| Journey check-in uses SignalMesh timer | PASS (Physical) | Starting the trek started a 15-min check-in; Home showed "due in 9 minutes" |
+| Pause tracking | PASS (Physical, by user) | Home showed "Tracking paused" |
+| Offline queue in new UI (simulate no signal → queued → delivered) | NOT TESTED physically | Logic unchanged from prototype |
+| TalkBack activate-to-send on SOS button | Built; NOT TESTED | |
+| Emergency description field | Not built (needs an additive `description` param on `createSos`; deferred to avoid touching queue logic) | |
 | Connection settings save bug | Fixed: field now also saves on blur/Enter | Found on device |
 
 Follow-ups found: block `SYSTEM_ALERT_WINDOW` in release builds (present in generated main manifest); TrackMate on Phone 2 not installed yet.

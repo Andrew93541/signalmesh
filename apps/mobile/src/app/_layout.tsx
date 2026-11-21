@@ -40,6 +40,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="journey/new" options={{ title: 'New journey', presentation: 'modal' }} />
           <Stack.Screen name="journey/[id]" options={{ title: 'Journey' }} />
+          <Stack.Screen name="sos/[id]" options={{ title: 'Your SOS' }} />
           <Stack.Screen name="sos-history" options={{ title: 'SOS history' }} />
           <Stack.Screen name="relay" options={{ title: 'Help others' }} />
           <Stack.Screen name="connection" options={{ title: 'Connection settings' }} />
