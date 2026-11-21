@@ -69,6 +69,8 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 | Pause tracking | PASS (Physical, by user) | Home showed "Tracking paused" |
 | Offline queue in new UI (simulate no signal → queued → delivered) | NOT TESTED physically | Logic unchanged from prototype |
 | TalkBack activate-to-send on SOS button | Built; NOT TESTED | |
+| **Inc 4** SOS history, Help others (relay), Connection settings redesigned (UI only, same calls) | PASS (Physical) | Screenshots on Phone 1; "Test connection" returned "The safety station answered…" |
+| v2 review R1 confirmed on device | Known gap | Gateway shows the test SOS RESOLVED, phone still shows Acknowledged: polling stops at ACKNOWLEDGED. Fix scheduled with contract v2 (Phase 3) |
 | Emergency description field | Not built (needs an additive `description` param on `createSos`; deferred to avoid touching queue logic) | |
 | Connection settings save bug | Fixed: field now also saves on blur/Enter | Found on device |
 

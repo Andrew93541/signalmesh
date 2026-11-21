@@ -1,8 +1,8 @@
 // Reusable TrackMate UI components (DESIGN_SYSTEM.md § 5).
 
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { color, radius, shadow1, space, type, type TypeStyle } from './theme';
@@ -193,6 +193,56 @@ export function EmptyState({ icon, title, body, action }: { icon: AndroidSymbol;
       <Txt v="headline" center>{title}</Txt>
       <Txt v="callout" c={color.text2} center>{body}</Txt>
       {action}
+    </View>
+  );
+}
+
+/**
+ * Text field that commits its value when editing ends in any way (blur, Enter,
+ * end-editing). Some Android keyboards close on Back without onEndEditing.
+ */
+export function SettingField({ label, hint, value, onSave, numeric, placeholder }: {
+  label: string; hint?: string; value: string; onSave: (v: string) => void; numeric?: boolean; placeholder?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const commit = () => { if (draft.trim() !== value) onSave(draft.trim()); };
+  return (
+    <View style={{ gap: space.xs }}>
+      <Txt v="headline">{label}</Txt>
+      <TextInput
+        accessibilityLabel={label}
+        style={s.input}
+        value={draft}
+        onChangeText={setDraft}
+        onEndEditing={commit}
+        onBlur={commit}
+        onSubmitEditing={commit}
+        returnKeyType="done"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType={numeric ? 'number-pad' : 'default'}
+        placeholder={placeholder}
+        placeholderTextColor={color.text3}
+      />
+      {hint ? <Txt v="footnote" c={color.text2}>{hint}</Txt> : null}
+    </View>
+  );
+}
+
+export function SwitchRow({ title, subtitle, value, onChange }: { title: string; subtitle?: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <View style={[s.row, { paddingHorizontal: 0 }]}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt v="headline">{title}</Txt>
+        {subtitle ? <Txt v="footnote" c={color.text2}>{subtitle}</Txt> : null}
+      </View>
+      <Switch
+        accessibilityLabel={title}
+        value={value}
+        onValueChange={onChange}
+        trackColor={{ true: color.primary, false: color.borderStrong }}
+        thumbColor={color.bg}
+      />
     </View>
   );
 }

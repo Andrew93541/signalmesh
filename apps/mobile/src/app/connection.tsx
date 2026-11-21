@@ -1,90 +1,82 @@
 import { useState } from 'react';
-import { Switch, TextInput, View } from 'react-native';
 
-import { Button, C, Card, LinkBanner, Screen, T, s } from '@/components/sm';
 import { gateway } from '@/lib/gateway';
 import { saveSettings, settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
-import { syncNow } from '@/lib/sync';
+import { linkStore, syncNow } from '@/lib/sync';
+import { Banner, Button, Card, Screen, Section, SettingField, SwitchRow, Txt } from '@/ui/kit';
+import { color } from '@/ui/theme';
 
-function Field({ label, value, onSave, numeric, hint }: {
-  label: string; value: string; onSave: (v: string) => void; numeric?: boolean; hint?: string;
-}) {
-  const [draft, setDraft] = useState(value);
-  return (
-    <View style={{ gap: 6 }}>
-      <T muted size={12} bold>{label}</T>
-      <TextInput
-        accessibilityLabel={label}
-        style={s.input}
-        value={draft}
-        onChangeText={setDraft}
-        // Save on every way editing can end: some Android keyboards close on Back
-        // without firing onEndEditing, which left the old value in use.
-        onEndEditing={() => onSave(draft.trim())}
-        onBlur={() => onSave(draft.trim())}
-        onSubmitEditing={() => onSave(draft.trim())}
-        returnKeyType="done"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType={numeric ? 'number-pad' : 'default'}
-        placeholderTextColor={C.muted}
-      />
-      {hint ? <T muted size={12}>{hint}</T> : null}
-    </View>
-  );
-}
+type TestResult = { ok: boolean; text: string } | null;
 
-export default function SettingsScreen() {
+export default function ConnectionSettings() {
   const settings = useStore(settingsStore);
-  const [test, setTest] = useState<string | null>(null);
+  const link = useStore(linkStore);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<TestResult>(null);
 
   async function testConnection() {
-    setTest('Testing…');
+    setTesting(true);
+    setResult(null);
     try {
       await gateway.health();
-      setTest('OK: next hop answered /health');
+      setResult({ ok: true, text: 'The safety station answered. SOS messages can be delivered.' });
     } catch (e) {
-      setTest(`Failed: ${e instanceof Error ? e.message : e}`);
+      setResult({ ok: false, text: `Could not reach it (${e instanceof Error ? e.message : String(e)}). Check the address and that both devices are on the same network.` });
+    } finally {
+      setTesting(false);
     }
   }
 
   return (
     <Screen>
-      <T size={24} bold>Settings</T>
-      <LinkBanner />
+      <Section title="You">
+        <SettingField label="Your name" value={settings.workerName}
+          hint="Shown to responders with your SOS."
+          onSave={(v) => saveSettings({ workerName: v || 'Worker' })} />
+      </Section>
 
-      <Field
-        label="NEXT HOP URL (RELAY OR GATEWAY)"
-        value={settings.gatewayUrl}
-        onSave={(v) => { saveSettings({ gatewayUrl: v }); syncNow(); }}
-        hint="e.g. http://192.168.1.10:8000, the laptop's IP on the shared hotspot"
-      />
-      <Button label="Test connection" onPress={testConnection} />
-      {test ? <T muted>{test}</T> : null}
+      <Section title="Safety station">
+        <Banner
+          tone={link.state === 'online' ? 'success' : 'warning'}
+          icon={link.state === 'online' ? 'wifi' : 'wifi_off'}
+          title={link.state === 'online' ? 'Connected' : link.state === 'simulated_offline' ? 'Offline test mode is on' : 'Not connected'}
+          body={link.state === 'online' ? undefined : link.error ?? undefined}
+        />
+        <SettingField
+          label="Safety station address"
+          value={settings.gatewayUrl}
+          placeholder="http://192.168.1.10:8000"
+          hint="The station laptop, or a nearby phone that is helping others. Your organizer gives you this address."
+          onSave={(v) => { saveSettings({ gatewayUrl: v }); syncNow(); }}
+        />
+        <Button label="Test connection" kind="secondary" icon="wifi" onPress={testConnection} loading={testing} />
+        {result ? <Banner tone={result.ok ? 'success' : 'critical'} icon={result.ok ? 'check_circle' : 'error'} title={result.ok ? 'Connected' : 'Not reachable'} body={result.text} /> : null}
+      </Section>
 
-      <Field label="DEVICE ID" value={settings.deviceId} onSave={(v) => saveSettings({ deviceId: v || 'MOBILE_01' })} />
-      <Field label="WORKER NAME" value={settings.workerName} onSave={(v) => saveSettings({ workerName: v || 'Worker' })} />
-      <Field
-        label="CHECK-IN INTERVAL (MINUTES)"
-        value={String(settings.checkinMinutes)}
-        numeric
-        onSave={(v) => saveSettings({ checkinMinutes: Math.max(1, parseInt(v, 10) || 15) })}
-      />
+      <Section title="Check-in">
+        <SettingField label="Default check-in interval (minutes)" numeric value={String(settings.checkinMinutes)}
+          hint="Journeys can set their own interval."
+          onSave={(v) => saveSettings({ checkinMinutes: Math.max(1, parseInt(v, 10) || 15) })} />
+      </Section>
 
-      <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <T bold>Simulate no signal</T>
-            <T muted size={13}>Demo switch. SOS messages queue on the phone and send when you turn it off.</T>
-          </View>
-          <Switch
-            accessibilityLabel="Simulate no signal"
+      <Section title="Testing">
+        <Card>
+          <SwitchRow
+            title="Offline test mode"
+            subtitle="Pretend there is no connection. SOS messages stay saved on the phone and are sent when you switch this off."
             value={settings.simulateNoSignal}
-            onValueChange={(v) => { saveSettings({ simulateNoSignal: v }); syncNow(); }}
+            onChange={(v) => { saveSettings({ simulateNoSignal: v }); syncNow(); }}
           />
-        </View>
-      </Card>
+        </Card>
+      </Section>
+
+      <Section title="Advanced">
+        <SettingField label="Device ID" value={settings.deviceId}
+          hint="Identifies this phone to the safety station. Must be different on every phone."
+          onSave={(v) => saveSettings({ deviceId: v || 'MOBILE_01' })} />
+        <Txt v="footnote" c={color.text3}>Relay port {settings.relayPort}</Txt>
+      </Section>
     </Screen>
   );
 }

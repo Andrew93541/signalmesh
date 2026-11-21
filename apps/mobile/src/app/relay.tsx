@@ -1,22 +1,26 @@
-import { Alert, Switch, View } from 'react-native';
+import { Alert, View } from 'react-native';
 
-import { Button, C, Card, LinkBanner, Screen, T } from '@/components/sm';
 import { clearRelayQueue, relayStore, startRelay, stopRelay, type RelayItemState } from '@/lib/relay';
 import { saveSettings, settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
+import { linkStore } from '@/lib/sync';
+import { Banner, Button, Card, Icon, Screen, Section, StatTile, SwitchRow, Txt } from '@/ui/kit';
+import { color, space } from '@/ui/theme';
 
-const STATE_TEXT: Record<RelayItemState, [string, string]> = {
-  PENDING: ['Waiting for gateway', C.warn],
-  FORWARDED: ['Forwarded', C.ok],
-  REJECTED: ['Rejected by gateway', C.sos],
+const STATE: Record<RelayItemState, [string, string]> = {
+  PENDING: ['Waiting to pass on', color.warningText],
+  FORWARDED: ['Passed on', color.success],
+  REJECTED: ['Not accepted by the safety station', color.sosText],
 };
 
-export default function RelayScreen() {
+export default function HelpOthers() {
   const settings = useStore(settingsStore);
   const relay = useStore(relayStore);
+  const link = useStore(linkStore);
   const waiting = relay.items.filter((i) => i.state === 'PENDING').length;
   const forwarded = relay.items.filter((i) => i.state === 'FORWARDED').length;
 
+  // Same calls as before the redesign.
   function toggle(on: boolean) {
     saveSettings({ relayEnabled: on });
     if (on) void startRelay();
@@ -24,7 +28,9 @@ export default function RelayScreen() {
   }
 
   function confirmClear() {
-    Alert.alert('Clear relay queue?', 'Messages not yet forwarded will be lost.', [
+    Alert.alert('Clear relayed messages?', waiting > 0
+      ? `${waiting} message${waiting > 1 ? 's are' : ' is'} still waiting to be passed on and will be lost. This cannot be undone.`
+      : 'This removes the relay records from this phone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: clearRelayQueue },
     ]);
@@ -32,80 +38,80 @@ export default function RelayScreen() {
 
   return (
     <Screen>
-      <T size={24} bold>Relay</T>
-      <T muted>
-        Let nearby phones send their SOS through this phone. It stores each message and passes it on to the gateway.
-        Keep this phone plugged in with the app open.
-      </T>
+      <Txt v="body" c={color.text2}>
+        Let nearby TrackMate phones send their SOS through this phone. Each message is saved here first, then passed on to the safety station.
+      </Txt>
 
       <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <T bold>Relay mode</T>
-            <T muted size={13}>Node ID {settings.deviceId}</T>
-          </View>
-          <Switch accessibilityLabel="Relay mode" value={settings.relayEnabled} onValueChange={toggle} />
-        </View>
+        <SwitchRow title="Help others" subtitle={relay.running ? 'On: this phone is passing messages on' : 'Off'}
+          value={settings.relayEnabled} onChange={toggle} />
       </Card>
 
-      {relay.error ? (
-        <Card>
-          <T bold color={C.sos}>Relay could not start</T>
-          <T muted>{relay.error}</T>
-        </Card>
-      ) : null}
+      {relay.error ? <Banner tone="critical" icon="error" title="Could not start" body={relay.error} /> : null}
 
       {relay.running ? (
-        <Card>
-          <T muted size={13}>Other phones should send to</T>
-          <T size={20} bold mono>{`http://${relay.address ?? '<this phone IP>'}:${relay.port}`}</T>
-          <T muted size={13}>On the sender phone: Settings → Next hop URL.</T>
-        </Card>
+        <>
+          <Card tone="primary">
+            <Txt v="footnote" c={color.text2}>Nearby phones send to</Txt>
+            <Txt v="title2" c={color.primary} style={{ fontVariant: ['tabular-nums'] }}>
+              {`http://${relay.address ?? 'this phone'}:${relay.port}`}
+            </Txt>
+            <Txt v="footnote" c={color.text}>On the other phone: Profile → Connection settings → Safety station address.</Txt>
+          </Card>
+          <View style={{ flexDirection: 'row', gap: space.s, alignItems: 'flex-start' }}>
+            <Icon name="info" size={18} tint={color.text2} />
+            <Txt v="footnote" c={color.text2} style={{ flex: 1 }}>
+              Keep this phone plugged in with TrackMate open. Works over a shared Wi-Fi network or this phone&apos;s hotspot; it is not Bluetooth mesh.
+            </Txt>
+          </View>
+        </>
       ) : null}
 
-      <T muted size={12} bold>THIS RELAY&apos;S NEXT HOP: {settings.gatewayUrl}</T>
-      <LinkBanner />
+      <Section title="Safety station">
+        <Banner
+          tone={link.state === 'online' ? 'success' : 'warning'}
+          icon={link.state === 'online' ? 'wifi' : 'wifi_off'}
+          title={link.state === 'online' ? 'Connected' : 'Not connected'}
+          body={link.state === 'online'
+            ? 'Messages are passed on straight away.'
+            : 'Messages are kept on this phone and passed on when the connection returns.'}
+        />
+        <Txt v="footnote" c={color.text3}>Address: {settings.gatewayUrl}</Txt>
+      </Section>
 
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        {[
-          ['Received', relay.items.length],
-          ['Waiting', waiting],
-          ['Forwarded', forwarded],
-        ].map(([label, n]) => (
-          <View key={label} style={{ flex: 1 }}>
-            <Card>
-              <T size={24} bold>{n}</T>
-              <T muted size={12}>{label}</T>
-            </Card>
-          </View>
-        ))}
-      </View>
-      {relay.pendingCheckins > 0 ? <T color={C.warn}>{relay.pendingCheckins} check-in(s) waiting for the gateway</T> : null}
+      <Section title="Messages">
+        <View style={{ flexDirection: 'row', gap: space.s }}>
+          <StatTile label="Received" value={String(relay.items.length)} />
+          <StatTile label="Waiting" value={String(waiting)} />
+          <StatTile label="Passed on" value={String(forwarded)} />
+        </View>
+        {relay.pendingCheckins > 0 ? (
+          <Txt v="footnote" c={color.warningText}>{relay.pendingCheckins} check-in{relay.pendingCheckins > 1 ? 's' : ''} waiting to be passed on</Txt>
+        ) : null}
+        {relay.items.length === 0 ? (
+          <Txt v="callout" c={color.text2}>No messages relayed yet.</Txt>
+        ) : (
+          relay.items.map((i) => {
+            const [label, tint] = STATE[i.state];
+            return (
+              <Card key={i.message.message_id}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.s }}>
+                  <Txt v="headline">{i.message.worker_name}</Txt>
+                  <Txt v="footnote" c={tint} style={{ fontWeight: '600' }}>{label}</Txt>
+                </View>
+                <Txt v="footnote" c={color.text2}>
+                  Received {new Date(i.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {i.nextStatus ? ` · station says ${i.nextStatus.toLowerCase()}` : ''}
+                </Txt>
+                <Txt v="caption" c={color.text3}>Path {i.message.hops.join(' → ')}</Txt>
+                {i.lastError && i.state !== 'FORWARDED' ? <Txt v="footnote" c={color.warningText}>Last try: {i.lastError}</Txt> : null}
+              </Card>
+            );
+          })
+        )}
+      </Section>
 
-      {relay.items.length === 0 ? (
-        <T muted>No messages relayed yet.</T>
-      ) : (
-        relay.items.map((i) => {
-          const [text, color] = STATE_TEXT[i.state];
-          return (
-            <Card key={i.message.message_id}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <T bold>{i.message.category} · {i.message.priority}</T>
-                <T color={color} size={13} bold>{text}</T>
-              </View>
-              <T muted mono size={12}>{i.message.message_id}</T>
-              <T muted size={13}>Path: {i.message.hops.join(' → ')}</T>
-              <T muted size={13}>
-                From {i.from ?? 'unknown'} at {new Date(i.receivedAt).toLocaleTimeString()}
-                {i.nextStatus ? ` · gateway says ${i.nextStatus}` : ''}
-              </T>
-              {i.lastError && i.state !== 'FORWARDED' ? <T color={C.warn} size={13}>{i.lastError}</T> : null}
-            </Card>
-          );
-        })
-      )}
-
-      {relay.items.length > 0 ? <Button label="Clear relay queue" onPress={confirmClear} /> : null}
+      {relay.items.length > 0 ? <Button label="Clear relayed messages" kind="destructive" icon="delete" onPress={confirmClear} /> : null}
     </Screen>
   );
 }
