@@ -80,6 +80,24 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 
 Follow-ups found: block `SYSTEM_ALERT_WINDOW` in release builds (present in generated main manifest); TrackMate on Phone 2 not installed yet.
 
+## Single-phone relay check (2026-11-21, Phone 1 as relay over USB, sender simulated from the Mac)
+
+Level: **Physical relay node, simulated sender.** Not the two-phone test.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Relay starts in the dev build | **FAIL → fixed → PASS** | Bug: `require('react-native-tcp-socket').default` was undefined (package overwrites `module.exports`); error text wrongly blamed Expo Go. Fixed in `relay.ts` (`mod.default ?? mod`, real error shown) |
+| Relay serves HTTP on the phone | PASS | `GET /health` → `{"node_id":"MOBILE_01","role":"relay"}` from the phone |
+| Relay stores before forwarding, adds itself to path | PASS | Phone SQLite: received 13:05:29.081 → forwarded 13:05:29.219, hops `SIM_SENDER→MOBILE_01`; gateway path `SIM_SENDER→MOBILE_01→GATEWAY_01`, hop_count 1 |
+| Relay answers RELAYED, never claims delivery | PASS | `201 {"status":"RELAYED"}` |
+| Duplicate retries | PASS | 2 relay retries → `200 duplicate:true`, not re-forwarded; 1 gateway record, 1 relay row |
+| Gateway down → relay holds → forwards on return | PASS (after discarding an invalid first attempt*) | Gateway process stopped: relay `PENDING`, 5 attempts, ack-status via relay = `RELAYED`; restart → forwarded ~2 s later after 10 attempts; created_at preserved |
+| Ack reaches sender's status query through relay | PASS | Before: `DELIVERED`; after gateway ack: `ACKNOWLEDGED · Test responder (Mac)` via relay |
+| Gateway persistence across restart | PASS | All 3 test records present after restart |
+| Relay address shown to users | **Known issue** | Shows `192.0.0.2` (mobile-data interface) when Wi-Fi is off; re-check with hotspot in the two-phone test |
+
+\* Removing `adb reverse` did not cut the phone's existing keep-alive connection, so the first "gateway down" run was not a real outage and was not counted.
+
 ## Scenario checklist (SignalMesh)
 
 | Scenario | Result |

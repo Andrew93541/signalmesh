@@ -284,12 +284,15 @@ export async function startRelay() {
   let TcpSocket: any;
   try {
     // Lazy require: the native module is absent in Expo Go, and importing it at the top would crash there.
+    // The package sets module.exports after `export default`, so require() returns the object itself.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    TcpSocket = require('react-native-tcp-socket').default;
+    const mod = require('react-native-tcp-socket');
+    TcpSocket = mod.default ?? mod;
     server = TcpSocket.createServer(handleConnection);
-  } catch {
+  } catch (e) {
     server = null;
-    patch({ running: false, error: 'Relay mode needs the SignalMesh app build. It cannot run inside Expo Go.' });
+    console.warn('[relay] could not start', e);
+    patch({ running: false, error: `Relay could not start on this build (${e instanceof Error ? e.message : String(e)}).` });
     return;
   }
   server.on('error', (e: Error) => {
