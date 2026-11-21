@@ -59,7 +59,26 @@ route: used for SOS and check-ins only when cheaper routes are unavailable, with
 compact payloads and explicit cost rules. Provider-specific code stays inside the
 adapter and a matching server-side receiver.
 
-## 5. Decision gate
+## 5. Satellite simulator vs real satellite connectivity
+
+**Today: no satellite simulator exists in the code** (checked 2026-11-21: the
+only simulation is the "Simulate no signal" demo switch, which pauses sending).
+
+A simulator may be built later to test the satellite adapter's queueing, compact
+payloads, cost rules and delayed receipts without hardware. If it is, it must be
+impossible to confuse with a real satellite link:
+
+| Rule | Requirement |
+|---|---|
+| Separate identity | Transport id `satellite-simulated`, never `satellite-external` / `satellite-native`. A message's `TransportAttempt` records `simulated: true`. |
+| Never a real state | A simulated send never sets `delivery_state` to `TRANSMITTED` or `DELIVERED`; it records the attempt only as `SIMULATED` on the attempt, and the message stays `QUEUED` unless a real route carries it. |
+| Off in release builds | Compiled out of / disabled in release and Play builds; available only in debug/dev builds behind a developer setting. |
+| Labelled everywhere | Any screen, log line, dashboard row or report touching it says **"Simulated satellite (not real)"**. Consumer screens never show it. |
+| Not in evidence | Test reports list simulator results under **Simulated**, never under **Physically tested** (IMPLEMENTATION_STATUS.md levels). |
+| Not in marketing or pricing | Plans & pricing show satellite as "not available" until §6 is met, regardless of simulator status. |
+| Gateway side | If the gateway ever accepts simulated traffic, it is tagged and excluded from incident counts and responder views by default. |
+
+## 6. Decision gate
 
 A device is chosen only with: written confirmation of legality for the target
 users, a usable SDK/API, delivery receipts, commercial terms, and a physical test

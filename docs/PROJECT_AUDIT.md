@@ -12,7 +12,7 @@ working parts of SignalMesh without losing or re-doing them.
 | Commits | **1** (`1d5d591`, initial monorepo scaffold). Pushed. |
 | Uncommitted work | ~2,300 lines of source in 38 changed/new files: gateway, relay, mobile logic, contract, docs. **Not committed, not pushed.** |
 | Backup taken | `~/Developer/signalmesh-backups/uncommitted-20261121-1644.tar.gz` (all 38 files) and `tracked-changes-20261121-1644.patch`. Outside the repo; git untouched. |
-| Recommendation | Commit this work on a branch (e.g. `signalmesh-prototype`) and push. **Needs your approval.** |
+| Update | Approved and done: committed as `60ac176` on branch `signalmesh-prototype`, pushed. |
 
 ## 2. Repository structure
 
@@ -135,10 +135,10 @@ ARCHITECTURE.md §5 for the proposed backward-compatible v2. **Not changed yet.*
 - Payment research: Google Play Billing rules for in-app digital subscriptions (and India's billing options), RBI recurring-payment rules, refunds/cancellation. **Needs policy and legal review.**
 - Pricing page (mobile + web), billing history, plan state.
 
-## 9. Open decisions for you
+## 9. Decisions (resolved after the audit)
 
-1. Approve committing the existing work to a branch and pushing.
-2. Approve the split: **edge gateway** (existing, SQLite) + new **TrackMate backend** (PostgreSQL/PostGIS) — ARCHITECTURE.md §3.
-3. Approve contract v2 (separate delivery vs incident state) — ARCHITECTURE.md §5.
-4. Where the teammate's dashboard lives, and whether it moves into this repo.
-5. Rename app/package to TrackMate now or later.
+1. Existing work committed and pushed on `signalmesh-prototype` (`60ac176`).
+2. Separate TrackMate backend, edge gateway kept — DECISIONS.md D1.
+3. Contract v2, v1 compatible — D2.
+4. Teammate's dashboard moves into this repo (`apps/dashboard`) — D3; location still needed.
+5. Rename to TrackMate at Phase 2 start — D4; final Android app id to confirm.

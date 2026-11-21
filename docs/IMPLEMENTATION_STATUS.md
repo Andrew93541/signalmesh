@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated: 2026-11-21 (Phase 0). Update this file at the end of every phase.
+Updated: 2026-11-21 (Phase 1 decisions). Update this file at the end of every phase.
 
 Test levels: **Unit** · **Integration** (in-process / local services) ·
 **Simulated** (mock or fake transport) · **Physical** (real devices) · **Not tested**.
@@ -9,8 +9,8 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Audit, protect work, docs | **Done, awaiting approval** |
-| 1 | Product spec & architecture | Not started (drafts in PRODUCT.md, ARCHITECTURE.md) |
+| 0 | Audit, protect work, docs | **Done** — committed on `signalmesh-prototype` (`60ac176`) |
+| 1 | Product spec & architecture | **In progress** — D1–D4 approved (DECISIONS.md); contract v2 specified and reviewed (R1–R9), not implemented; drafts awaiting approval: SCREENS.md (91 screens), DESIGN_SYSTEM.md, APP_ID_MIGRATION.md, DASHBOARD_IMPORT.md; dashboard code location still needed |
 | 2 | TrackMate core app | Not started |
 | 3 | SignalMesh reliability | Partly exists (prototype) |
 | 4 | Fitness / Health Connect | Not started |

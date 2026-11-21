@@ -17,7 +17,7 @@ one next-hop URL. No accounts, no auth, no dashboard in the repo.
 - **Separate data domains:** safety/SOS, location, journeys, social, fitness, billing each get their own tables and API groups.
 - **Server-side authority** for permissions and entitlements; the UI only reflects them.
 
-## 3. Proposed target (needs approval)
+## 3. Target (approved — DECISIONS.md D1)
 
 ```
                          ┌──────────────── TrackMate backend (new) ───────────────┐
@@ -52,7 +52,7 @@ Mapping from today's code: `outbox.ts` → persistent queue; `gateway.ts` +
 `sync.ts` → InternetAdapter/LAN path; `relay.ts` → relay node behaviour (a
 phone acting as a hop) and the target of the RelayAdapter.
 
-## 5. Message and incident state (contract v2 proposal)
+## 5. Message and incident state (contract v2 — approved, DECISIONS.md D2; full spec in CONTRACT.md § v2)
 
 Today one `status` field mixes delivery and incident progress. Proposal:
 
@@ -61,10 +61,9 @@ Today one `status` field mixes delivery and incident progress. Proposal:
 | `delivery_state` | `QUEUED → RELAYED → TRANSMITTED → DELIVERED` | SignalMesh |
 | `incident_state` | `OPEN → ACKNOWLEDGED → DISPATCHED → RESOLVED` | Backend / responders |
 
-Compatibility: v1 `status` stays in responses for existing clients, derived as
-`incident_state` if past `OPEN`, else `delivery_state`. New routes under `/v2`
-or a version field; v1 routes unchanged until all clients move. `DISPATCHED`
-requires evidence (who, when, which team).
+Compatibility: v2 is additive on the same routes. v1 `status` stays in
+responses, derived from the two fields (table in CONTRACT.md § v2).
+`DISPATCHED` requires evidence (who, when, which team).
 
 ## 6. Data model (backend)
 
@@ -92,7 +91,17 @@ Every route: request validation, authentication, per-resource authorization,
 rate limiting on social and auth routes, audit logging on safety, location,
 health and billing changes.
 
-## 8. Mobile app structure (proposed)
+## 8. Repo layout after Phase 1 decisions
+
+```
+apps/mobile      TrackMate app (renamed at Phase 2 start — D4)
+apps/dashboard   responder dashboard, imported from teammate (D3); replaces unused apps/web
+gateway/         SignalMesh edge gateway (unchanged role — D1)
+backend/         TrackMate backend, new (D1)
+docs/
+```
+
+## 9. Mobile app structure (proposed)
 
 ```
 src/app/(tabs)/home | explore | journeys | safety | profile
@@ -103,13 +112,13 @@ src/ui/                     design system (tokens, components)
 ```
 Move existing `src/lib` files without editing logic (path changes only).
 
-## 9. Fitness
+## 10. Fitness
 
 `FitnessProvider` interface → `HealthConnectAdapter` (Android). `FitnessSyncService`
 reads only permitted types; `ActivityRepository` stores locally; server sync is
 opt-in and minimal. Fitness never flows into SOS or responder views by default.
 
-## 10. Risks
+## 11. Risks
 
 | Risk | Mitigation |
 |---|---|

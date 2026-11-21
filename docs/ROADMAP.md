@@ -17,8 +17,12 @@ listed, IMPLEMENTATION_STATUS.md updated, and **approval before the next major p
 | **8 Satellite** | Provider research → decision → adapter | Only with a chosen, legal, available device and documented evidence |
 | **9 Security & pilot** | Threat review, pen-test checklist, privacy docs, pilot with a trekking organizer | Pilot sign-off; legal review items closed |
 
-## Immediate next steps (proposed)
+## Immediate next steps
 
-1. Commit current work to a branch (approval needed).
-2. Run the physical relay test (Phase 0.5).
-3. Phase 1 decisions: backend split, contract v2, app rename, dashboard location.
+1. ~~Commit current work to a branch~~ — done: `signalmesh-prototype` @ `60ac176`.
+2. ~~Phase 1 decisions~~ — done: DECISIONS.md D1–D4.
+3. Remaining Phase 1 work:
+   - Approve drafts: SCREENS.md, DESIGN_SYSTEM.md, APP_ID_MIGRATION.md, contract v2 review notes.
+   - Import the teammate's dashboard into `apps/dashboard` (needs its location; steps in DASHBOARD_IMPORT.md).
+   - Run the checks in APP_ID_MIGRATION.md §2 (Play ID availability, domain, trademark).
+4. Run the physical relay test (Phase 0.5) — still pending.
