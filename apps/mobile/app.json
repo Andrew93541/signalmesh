@@ -41,9 +41,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#FFFDF5",
+          "image": "./assets/brand/splash-blank.png",
+          "imageWidth": 1
         }
       ],
       "expo-sqlite",
@@ -60,7 +60,8 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

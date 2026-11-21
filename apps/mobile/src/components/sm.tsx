@@ -12,12 +12,12 @@ import { linkStore } from '@/lib/sync';
 // Light TrackMate tokens (src/ui/theme.ts) mapped onto the original placeholder names,
 // so the existing SignalMesh screens keep working unchanged while they are redesigned.
 export const C = {
-  bg: '#F6F7F9',
+  bg: '#FFFDF5',
   card: '#FFFFFF',
   border: '#E2E6EC',
-  text: '#0F1B2D',
-  muted: '#475467',
-  sos: '#C8261B',
+  text: '#19382C',
+  muted: '#5E6E63',
+  sos: '#D92D36',
   ok: '#1A7346',
   warn: '#8A4B00',
 };
@@ -104,7 +104,7 @@ const STATUS_COLOR: Record<LocalStatus, string> = {
   QUEUED: C.warn,
   CREATED: C.muted,
   RELAYED: C.warn,
-  DELIVERED: '#1D5FD1',
+  DELIVERED: '#075C3B',
   ACKNOWLEDGED: C.ok,
   RESOLVED: C.muted,
 };

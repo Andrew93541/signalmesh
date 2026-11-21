@@ -1,15 +1,17 @@
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 
 import { settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
-import { MODE_LABEL, prefsStore, setMode, type Mode } from '@/trackmate/prefs';
+import { logout, sessionStore } from '@/trackmate/auth';
+import { MODE_LABEL, prefsStore, savePrefs, setMode, type Mode } from '@/trackmate/prefs';
 import { Card, Chip, Icon, Row, Screen, Section, Txt, s } from '@/ui/kit';
 import { color, space } from '@/ui/theme';
 
 export default function Profile() {
   const { mode } = useStore(prefsStore);
   const settings = useStore(settingsStore);
+  const { session } = useStore(sessionStore);
 
   return (
     <Screen tab>
@@ -18,10 +20,32 @@ export default function Profile() {
           <Txt v="title1" c={color.primary}>{settings.workerName.slice(0, 1).toUpperCase()}</Txt>
         </View>
         <View style={{ flex: 1 }}>
-          <Txt v="title1">{settings.workerName}</Txt>
-          <Txt v="footnote" c={color.text2}>Device {settings.deviceId} · No account yet</Txt>
+          <Txt v="title1">{session?.user.full_name ?? settings.workerName}</Txt>
+          <Txt v="footnote" c={color.text2}>Device {settings.deviceId} · {session ? "Signed in" : "No account"}</Txt>
         </View>
       </View>
+
+      <Section title="Account">
+        <Card>
+          {session ? (
+            <>
+              <Row icon="person" title={session.user.full_name}
+                subtitle={`${session.user.email} · ${session.user.phone}`} />
+              <Row icon="info" title="Email and phone not verified"
+                subtitle="Verification messages aren't set up in this test version yet." />
+              <Row icon="logout" title="Sign out" danger
+                onPress={() => Alert.alert('Sign out?', 'Journeys, contacts and SOS history stay on this phone. SOS keeps working.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign out', style: 'destructive', onPress: () => void logout() },
+                ])} />
+            </>
+          ) : (
+            <Row icon="person" title="Sign in or create an account"
+              subtitle="You're using TrackMate without an account."
+              onPress={() => savePrefs({ guest: false })} />
+          )}
+        </Card>
+      </Section>
 
       <Section title="Mode">
         <View style={s.wrap} accessibilityRole="radiogroup">

@@ -72,7 +72,7 @@ export function SosButton({ onSend, busy }: { onSend: () => void; busy?: boolean
         <Animated.View
           pointerEvents="none"
           style={{
-            position: 'absolute', width: SIZE, height: SIZE, borderRadius: SIZE / 2, backgroundColor: '#8E1A12',
+            position: 'absolute', width: SIZE, height: SIZE, borderRadius: SIZE / 2, backgroundColor: '#9E1B23',
             transform: [{ scale: progress }],
           }}
         />

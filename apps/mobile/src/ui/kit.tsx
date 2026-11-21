@@ -229,6 +229,65 @@ export function SettingField({ label, hint, value, onSave, numeric, placeholder 
   );
 }
 
+/** Labelled input with inline error. `secure` adds a show/hide toggle. */
+export function FormField({ label, value, onChange, error, hint, secure, keyboard = 'default', autoComplete, placeholder, autoCapitalize = 'none' }: {
+  label: string; value: string; onChange: (v: string) => void; error?: string; hint?: string; secure?: boolean;
+  keyboard?: 'default' | 'email-address' | 'phone-pad' | 'number-pad';
+  autoComplete?: 'name' | 'email' | 'tel' | 'password' | 'new-password' | 'one-time-code' | 'username';
+  placeholder?: string; autoCapitalize?: 'none' | 'words';
+}) {
+  const [hidden, setHidden] = useState(true);
+  return (
+    <View style={{ gap: space.xs }}>
+      <Txt v="headline">{label}</Txt>
+      <View>
+        <TextInput
+          accessibilityLabel={label}
+          accessibilityHint={error}
+          style={[s.input, error ? { borderColor: color.sosText, borderWidth: 2 } : null, secure ? { paddingRight: 56 } : null]}
+          value={value}
+          onChangeText={onChange}
+          secureTextEntry={secure && hidden}
+          keyboardType={keyboard}
+          autoComplete={autoComplete}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={false}
+          placeholder={placeholder}
+          placeholderTextColor={color.text3}
+        />
+        {secure ? (
+          <Pressable onPress={() => setHidden(!hidden)} accessibilityRole="button" accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+            style={{ position: 'absolute', right: 4, top: 4, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name={hidden ? 'visibility' : 'visibility_off'} size={22} tint={color.text2} />
+          </Pressable>
+        ) : null}
+      </View>
+      {error ? (
+        <View style={{ flexDirection: 'row', gap: space.xs, alignItems: 'center' }}>
+          <Icon name="error" size={16} tint={color.sosText} />
+          <Txt v="footnote" c={color.sosText} style={{ flex: 1 }}>{error}</Txt>
+        </View>
+      ) : hint ? <Txt v="footnote" c={color.text2}>{hint}</Txt> : null}
+    </View>
+  );
+}
+
+/** Explicit, unticked-by-default checkbox. */
+export function Checkbox({ checked, onChange, children, label }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode; label: string }) {
+  return (
+    <Pressable onPress={() => onChange(!checked)} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={label}
+      style={{ flexDirection: 'row', gap: space.m, alignItems: 'flex-start', minHeight: 48, paddingVertical: space.xs }}>
+      <View style={{
+        width: 28, height: 28, borderRadius: 8, borderWidth: 2, borderColor: checked ? color.primary : color.borderStrong,
+        backgroundColor: checked ? color.primary : color.bg, alignItems: 'center', justifyContent: 'center', marginTop: 1,
+      }}>
+        {checked ? <Icon name="check" sf="checkmark" size={20} tint={color.onPrimary} /> : null}
+      </View>
+      <View style={{ flex: 1 }}>{children}</View>
+    </Pressable>
+  );
+}
+
 export function SwitchRow({ title, subtitle, value, onChange }: { title: string; subtitle?: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <View style={[s.row, { paddingHorizontal: 0 }]}>

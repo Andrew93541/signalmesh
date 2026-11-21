@@ -8,6 +8,8 @@ assert.equal(normalizePhone('098765-43210'), '09876543210');
 assert.equal(normalizePhone('12345'), null); // too short
 assert.equal(normalizePhone('+1234567890123456'), null); // too long
 assert.equal(normalizePhone('call me'), null);
+assert.equal(normalizePhone('+919000000001test.trekker@example.com'), null); // found on device: letters must not be stripped
+assert.equal(normalizePhone('+91 (98765) 432-10'), '+919876543210');
 
 assert.equal(validateContact({ name: '', phone: '+919876543210' }), 'Enter a name.');
 assert.match(validateContact({ name: 'Asha', phone: '12' })!, /7 to 15 digits/);

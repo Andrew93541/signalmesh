@@ -80,6 +80,28 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 
 Follow-ups found: block `SYSTEM_ALERT_WINDOW` in release builds (present in generated main manifest); TrackMate on Phone 2 not installed yet.
 
+## Brand & accounts — Increment 1 (2026-11-21, Phone 1 over USB)
+
+| Item | Result | Evidence |
+|---|---|---|
+| Logo stored unmodified | PASS | `assets/brand/trekmate-logo.webp` checksum = supplied file; PNG copy is format conversion only (1254×1254) |
+| Brand name | Decided: **TrackMate** (DECISIONS.md D5) | Logo artwork still reads "TrekMate": TrackMate version of the logo needed from the designer; no production icon until then |
+| Brand tokens (contrast computed) | PASS (Unit) | Suggested muted `#708075` failed AA (4.10:1) → `#5E6E63`; leaf green & orange fail as text (≈2.5–2.7:1) → accents only, `#B25300` for orange text |
+| Splash | PASS (Physical) | Native splash = warm background only (Android 12+ would clip the logo to a circle); in-app splash shows full logo, name, tagline, then fades |
+| Onboarding ×3 with Skip / Back / Continue / Get started | PASS (Physical) | Screenshots of pages 1 and 3 |
+| Account backend (`backend/`, FastAPI + SQLite dev, migrations) | PASS (Unit/Integration, 20 tests) | argon2id hashing, hashed session tokens, consent records, lockout, rate limit, enumeration-safe errors, reset codes single-use |
+| Registration (details → consent → create) | PASS (Physical) | DB: user, argon2id hash, no plaintext; emergency contact; 2 consent rows with user ID, version, timestamp, source |
+| Validation | PASS (Physical + Unit) | Empty form → "Please fix 6 fields"; found & fixed on device: letters in phone numbers were silently stripped (`+919000000001test@…` accepted) — now rejected in app and backend |
+| Terms / Privacy / Consent pages | PASS (Physical) | Draft banner + version shown; boxes unticked; Create disabled until both ticked; location/health/escalation consents explicitly separate |
+| Session persistence (secure storage) | PASS (Physical) | Force-stop + relaunch stays signed in |
+| Logout | PASS (Physical) | Server shows session revoked; app returns to sign-in |
+| Login (phone + password), wrong password | PASS (Physical) | Generic error for wrong password; correct one opens Home |
+| Forgot password UI | Integration only; **NOT TESTED physically** | No email/SMS provider: dev mode writes codes to server log, otherwise not delivered — UI says so |
+| Email / phone verification | Not available | No provider configured; accounts show "not verified" |
+| Continue without an account | Built; NOT TESTED physically | SOS and local features work without sign-in |
+| App icon | Not changed | Waiting for name decision; adaptive icon would also crop the square logo — needs a foreground-only asset |
+| Logo background | Note | Logo file has a white square behind the rounded border; a transparent version would blend with the warm background |
+
 ## Single-phone relay check (2026-11-21, Phone 1 as relay over USB, sender simulated from the Mac)
 
 Level: **Physical relay node, simulated sender.** Not the two-phone test.

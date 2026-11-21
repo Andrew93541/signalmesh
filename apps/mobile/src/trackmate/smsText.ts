@@ -10,6 +10,9 @@ export const RELATIONSHIP_LABEL: Record<Relationship, string> = {
 /** Keep digits and a leading +. Returns null if it is not a plausible phone number (7–15 digits, E.164 length). */
 export function normalizePhone(input: string): string | null {
   const trimmed = input.trim();
+  // Only phone characters: a leading +, digits and common separators. Letters, @ etc. are rejected
+  // (stripping them silently let "+91900…test@example.com" pass as a number).
+  if (!/^\+?[\d\s\-().]+$/.test(trimmed)) return null;
   const plus = trimmed.startsWith('+');
   const digits = trimmed.replace(/\D/g, '');
   if (digits.length < 7 || digits.length > 15) return null;

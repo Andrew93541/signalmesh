@@ -80,7 +80,7 @@ export default function Home() {
         accessibilityLabel="Need emergency help? Open SOS."
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center', gap: space.l, padding: space.l, borderRadius: radius.m,
-          backgroundColor: pressed ? '#A81F16' : color.sos,
+          backgroundColor: pressed ? '#B8222B' : color.sos,
         })}>
         <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}>
           <Txt v="headline" c="#FFFFFF" style={{ fontWeight: '800' }}>SOS</Txt>

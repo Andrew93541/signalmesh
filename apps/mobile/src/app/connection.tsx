@@ -4,6 +4,7 @@ import { gateway } from '@/lib/gateway';
 import { saveSettings, settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
 import { linkStore, syncNow } from '@/lib/sync';
+import { prefsStore, savePrefs } from '@/trackmate/prefs';
 import { Banner, Button, Card, Screen, Section, SettingField, SwitchRow, Txt } from '@/ui/kit';
 import { color } from '@/ui/theme';
 
@@ -12,6 +13,7 @@ type TestResult = { ok: boolean; text: string } | null;
 export default function ConnectionSettings() {
   const settings = useStore(settingsStore);
   const link = useStore(linkStore);
+  const prefs = useStore(prefsStore);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult>(null);
 
@@ -69,6 +71,16 @@ export default function ConnectionSettings() {
             onChange={(v) => { saveSettings({ simulateNoSignal: v }); syncNow(); }}
           />
         </Card>
+      </Section>
+
+      <Section title="Account server">
+        <SettingField
+          label="Account server address"
+          value={prefs.backendUrl}
+          placeholder="http://192.168.1.10:8100"
+          hint="Used for sign-in and your account. SOS does not depend on it."
+          onSave={(v) => savePrefs({ backendUrl: v || 'http://127.0.0.1:8100' })}
+        />
       </Section>
 
       <Section title="Advanced">

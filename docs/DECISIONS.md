@@ -50,6 +50,19 @@ changed from `com.signalmesh.app` (proposed `com.trackmate.app` — **confirm
 the final id; it is permanent once published on Play**). "SignalMesh" remains
 the name of the communication engine, gateway and contract.
 
+**Update (2026-11-21):** done — app id `com.trackmate.app`, name TrackMate.
+
 **Consequences.** Both test phones need the app reinstalled once (new app id =
 new app, local data not carried over). Repo name can stay `signalmesh` or be
 renamed on GitHub separately.
+
+## D5 — Product name is TrackMate (2026-11-21, confirmed by owner)
+
+**Decision.** The product name is **TrackMate**, as used in the app, code and docs.
+
+**Consequence.** The supplied logo artwork reads "TrekMate". It is used unmodified
+in the app for now (splash, onboarding, sign-in) but cannot be the production
+brand asset. Needed from the designer before release: the same logo with the
+"TrackMate" wordmark, plus (1) a transparent-background version and (2) a
+foreground-only mark for the Android adaptive app icon. Code is not changed to
+alter the artwork.
