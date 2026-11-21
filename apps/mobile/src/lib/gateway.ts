@@ -9,8 +9,9 @@ export class GatewayError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = getSettings().gatewayUrl.trim().replace(/\/+$/, '');
+async function request<T>(path: string, init?: RequestInit, baseUrl?: string): Promise<T> {
+  const base = (baseUrl ?? getSettings().gatewayUrl).trim().replace(/\/+$/, '');
+  if (!base) throw new GatewayError('No address set up');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -32,13 +33,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-export const gateway = {
-  health: () => request<unknown>('/health'),
+/** Client for one gateway or relay address. `gateway` (below) is the local next hop. */
+export function gatewayAt(baseUrl?: string) {
+  const req = <T,>(path: string, init?: RequestInit) => request<T>(path, init, baseUrl);
+  return {
+  health: () => req<unknown>('/health'),
 
   /** Returns the status the next hop reports (RELAYED from a relay, DELIVERED from the gateway). */
   async sendSos(message: SosMessage): Promise<SosStatus> {
     try {
-      const body = await request<{ status?: unknown } | null>('/gateway/sos', {
+      const body = await req<{ status?: unknown } | null>('/gateway/sos', {
         method: 'POST',
         body: JSON.stringify(message),
       });
@@ -51,11 +55,14 @@ export const gateway = {
   },
 
   ackStatus: (messageId: string) =>
-    request<AckStatus>(`/gateway/ack-status/${encodeURIComponent(messageId)}`),
+    req<AckStatus>(`/gateway/ack-status/${encodeURIComponent(messageId)}`),
 
   checkin: (payload: CheckinPayload) =>
-    request<unknown>('/gateway/checkin', { method: 'POST', body: JSON.stringify(payload) }),
+    req<unknown>('/gateway/checkin', { method: 'POST', body: JSON.stringify(payload) }),
 
   heartbeat: (body: { node_id: string; role: 'relay'; label: string; queue_size: number }) =>
-    request<unknown>('/gateway/nodes/heartbeat', { method: 'POST', body: JSON.stringify(body) }),
-};
+    req<unknown>('/gateway/nodes/heartbeat', { method: 'POST', body: JSON.stringify(body) }),
+  };
+}
+
+export const gateway = gatewayAt();

@@ -121,6 +121,30 @@ MIGRATIONS = [
         at TEXT NOT NULL
     );
     """,
+    # 3: location metadata + account link on incidents; editable profile; email/phone change verification
+    """
+    ALTER TABLE incidents ADD COLUMN location_accuracy_m REAL;
+    ALTER TABLE incidents ADD COLUMN location_recorded_at TEXT;
+    ALTER TABLE incidents ADD COLUMN location_source TEXT;
+    ALTER TABLE incidents ADD COLUMN location_is_last_known INTEGER;
+    ALTER TABLE incidents ADD COLUMN user_id TEXT;
+    ALTER TABLE users ADD COLUMN travel_preferences TEXT;
+    ALTER TABLE users ADD COLUMN trekking_experience TEXT;
+    ALTER TABLE users ADD COLUMN intro TEXT;
+    ALTER TABLE users ADD COLUMN photo_path TEXT;
+    ALTER TABLE users ADD COLUMN updated_at TEXT;
+    CREATE TABLE contact_changes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        kind TEXT NOT NULL,
+        new_value TEXT NOT NULL,
+        code_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        used_at TEXT
+    );
+    """,
 ]
 
 

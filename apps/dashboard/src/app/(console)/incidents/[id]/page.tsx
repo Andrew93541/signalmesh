@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { use, useState } from "react";
 
-import { CATEGORY_LABEL, Card, ErrorBox, PageHeader, Path, PriorityBadge, StatePill } from "@/components/ui";
-import { ago, api, fmtTime, type Incident, isStale, useLive } from "@/lib/client";
+import { CATEGORY_LABEL, Card, CopyCoords, ErrorBox, Freshness, PageHeader, Path, PriorityBadge, StatePill } from "@/components/ui";
+import { ago, api, fmtTime, type Incident, useLive } from "@/lib/client";
 
 const EVENT_LABEL: Record<string, string> = {
   RECEIVED: "Received by backend from gateway",
@@ -97,30 +97,46 @@ export default function IncidentDetail({ params }: { params: Promise<{ id: strin
             <Card>
               <h2 className="mb-4 text-lg font-bold">Emergency</h2>
               <dl className="grid gap-4 sm:grid-cols-2">
-                <Field label="Person">{inc.worker_name}</Field>
+                <Field label="Person">{inc.person ? `${inc.person.full_name} · ${inc.person.phone}` : inc.worker_name}</Field>
                 <Field label="Device">{inc.device_id}</Field>
                 <Field label="Category">{CATEGORY_LABEL[inc.category]}</Field>
                 <Field label="Priority"><PriorityBadge p={inc.priority} /></Field>
                 <Field label="Description">{inc.description ?? <span className="text-muted">None given</span>}</Field>
                 <Field label="Created on the phone">{fmtTime(inc.created_at)} ({ago(inc.created_at)})</Field>
+                {inc.person ? (
+                  <Field label="Emergency contacts">
+                    {inc.person.emergency_contacts.length ? inc.person.emergency_contacts.map((c) => `${c.name} (${c.relationship.toLowerCase()}) ${c.phone}`).join(" · ") : "None on file"}
+                  </Field>
+                ) : <Field label="Account">Not signed in on the phone</Field>}
               </dl>
             </Card>
             <Card>
-              <h2 className="mb-4 text-lg font-bold">Location</h2>
+              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold">Location <Freshness inc={inc} /></h2>
               {inc.latitude !== null && inc.longitude !== null ? (
                 <dl className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Coordinates"><span className="font-mono">{inc.latitude.toFixed(6)}, {inc.longitude.toFixed(6)}</span></Field>
-                  <Field label="Taken">
-                    {fmtTime(inc.created_at)} — when the SOS was created
-                    {isStale(inc.created_at) ? <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-semibold text-warn">Stale, may have moved</span> : null}
+                  <Field label="Coordinates">
+                    <span className="font-mono">{inc.latitude.toFixed(6)}, {inc.longitude.toFixed(6)}</span>{" "}
+                    <CopyCoords lat={inc.latitude} lon={inc.longitude} />
                   </Field>
-                  <Field label="Accuracy"><span className="text-muted">Not reported by this app version</span></Field>
+                  <Field label="Accuracy">{inc.location_accuracy_m !== null ? `±${Math.round(inc.location_accuracy_m)} m (reported by the phone)` : <span className="text-muted">Not reported by this app version</span>}</Field>
+                  <Field label="Captured by the phone">
+                    {inc.location_recorded_at ? `${fmtTime(inc.location_recorded_at)} (${ago(inc.location_recorded_at)})` : <span className="text-muted">Not reported</span>}
+                  </Field>
+                  <Field label="Received by server">{fmtTime(inc.received_at)}</Field>
+                  <Field label="Source">
+                    {inc.location_source === "DEVICE" ? "Phone location, fresh fix at SOS time"
+                      : inc.location_source === "DEVICE_LAST_KNOWN" ? "Phone's last-known location (no fresh fix)"
+                      : <span className="text-muted">Not reported</span>}
+                  </Field>
                   <Field label="Map">
                     <a className="font-semibold text-forest underline" target="_blank" rel="noreferrer"
                       href={`https://www.openstreetmap.org/?mlat=${inc.latitude}&mlon=${inc.longitude}#map=17/${inc.latitude}/${inc.longitude}`}>Open in OpenStreetMap</a>
                   </Field>
                 </dl>
               ) : <p className="text-sm text-muted">The phone had no location when this SOS was sent. No location is shown rather than a guess.</p>}
+              {inc.location_freshness === "LAST_KNOWN" ? (
+                <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">This is a last-known location, not a live position. The person may have moved.</p>
+              ) : null}
             </Card>
             <Card>
               <h2 className="mb-3 text-lg font-bold">Communication path</h2>

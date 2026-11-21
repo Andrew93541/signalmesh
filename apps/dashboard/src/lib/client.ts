@@ -14,6 +14,13 @@ export interface Incident {
   description: string | null;
   latitude: number | null;
   longitude: number | null;
+  location_accuracy_m: number | null;
+  location_recorded_at: string | null; // captured by the phone
+  location_source: "DEVICE" | "DEVICE_LAST_KNOWN" | null;
+  location_is_last_known: boolean | null;
+  location_freshness: "CURRENT" | "LAST_KNOWN" | "NONE";
+  user_id: string | null;
+  person?: { id: string; full_name: string; phone: string; emergency_contacts: { name: string; phone: string; relationship: string }[] } | null;
   created_at: string;
   received_at: string;
   hops: string[];

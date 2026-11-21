@@ -4,8 +4,9 @@ import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { login } from '@/trackmate/auth';
-import { savePrefs } from '@/trackmate/prefs';
-import { Banner, Button, FormField, Screen, Txt } from '@/ui/kit';
+import { useStore } from '@/lib/store';
+import { prefsStore, savePrefs } from '@/trackmate/prefs';
+import { Banner, Button, FormField, Screen, SettingField, Txt } from '@/ui/kit';
 import { Logo } from '@/ui/Logo';
 import { color, space } from '@/ui/theme';
 
@@ -15,6 +16,8 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { backendUrl } = useStore(prefsStore);
+  const [showServer, setShowServer] = useState(!backendUrl);
 
   async function submit() {
     if (!identifier.trim() || !password) {
@@ -58,6 +61,14 @@ export default function Login() {
         <Txt v="footnote" c={color.text2} center>
           Without an account you can still send an SOS, check in and track journeys on this phone.
         </Txt>
+
+        {showServer ? (
+          <SettingField label="Account server address" value={backendUrl} placeholder="https://api.example.org"
+            hint={backendUrl ? 'Your organizer gives you this address.' : 'Not set up in this build. Your organizer gives you this address.'}
+            onSave={(v) => savePrefs({ backendUrl: v })} />
+        ) : (
+          <Button label="Account server settings" kind="tertiary" compact onPress={() => setShowServer(true)} />
+        )}
       </Screen>
     </KeyboardAvoidingView>
   );

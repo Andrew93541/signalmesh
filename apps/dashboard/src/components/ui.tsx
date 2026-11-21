@@ -83,3 +83,18 @@ export function Stat({ label, value, tone = "plain", hint }: { label: string; va
     </div>
   );
 }
+
+export function Freshness({ inc }: { inc: Pick<Incident, "location_freshness" | "location_recorded_at"> }) {
+  const f = inc.location_freshness;
+  const style = f === "CURRENT" ? "bg-ok-soft text-ok" : f === "LAST_KNOWN" ? "bg-warn-soft text-warn" : "bg-surface2 text-muted";
+  const label = f === "CURRENT" ? "Current at SOS" : f === "LAST_KNOWN" ? "Last-known" : "No location";
+  return <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${style}`}>{label}</span>;
+}
+
+export function CopyCoords({ lat, lon }: { lat: number; lon: number }) {
+  return (
+    <button type="button" onClick={() => void navigator.clipboard?.writeText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`)}
+      className="rounded border border-line-strong px-2 py-0.5 text-xs font-semibold text-forest hover:bg-forest-soft"
+      aria-label={`Copy coordinates ${lat.toFixed(6)}, ${lon.toFixed(6)}`}>Copy</button>
+  );
+}

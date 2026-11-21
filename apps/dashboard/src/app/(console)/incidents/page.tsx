@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { CATEGORY_LABEL, Card, Empty, ErrorBox, PageHeader, Path, PriorityBadge, StatePill } from "@/components/ui";
-import { fmtTime, type Incident, isStale, useLive } from "@/lib/client";
+import { CATEGORY_LABEL, Card, CopyCoords, Empty, ErrorBox, Freshness, PageHeader, Path, PriorityBadge, StatePill } from "@/components/ui";
+import { fmtTime, type Incident, useLive } from "@/lib/client";
 
 const SELECT = "rounded-lg border border-line-strong bg-white px-3 py-2 text-sm";
 const WINDOWS = { all: "Any time", "1h": "Last hour", "24h": "Last 24 hours", "7d": "Last 7 days" } as const;
@@ -69,7 +69,7 @@ export default function Incidents() {
           <table className="w-full min-w-[1100px] text-left text-sm">
             <thead className="bg-surface text-xs uppercase tracking-wide text-muted">
               <tr>
-                {["Incident", "Person / device", "Type", "Priority", "Created", "Last-known location", "Accuracy", "Delivery", "Status", "Path"].map((h) => (
+                {["Incident", "Person / device", "Type", "Priority", "Created", "Location", "Accuracy", "Location time", "Delivery", "Status", "Path"].map((h) => (
                   <th key={h} scope="col" className="px-3 py-3 font-semibold">{h}</th>
                 ))}
               </tr>
@@ -85,14 +85,15 @@ export default function Incidents() {
                   <td className="px-3 py-3"><PriorityBadge p={i.priority} /></td>
                   <td className="px-3 py-3 whitespace-nowrap">{fmtTime(i.created_at)}</td>
                   <td className="px-3 py-3">
-                    {i.latitude !== null && i.longitude !== null ? (
-                      <>
-                        <span className="font-mono text-xs">{i.latitude.toFixed(5)}, {i.longitude.toFixed(5)}</span>
-                        {isStale(i.created_at) ? <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-semibold text-warn">Stale</span> : null}
-                      </>
-                    ) : <span className="text-muted">Not available</span>}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {i.latitude !== null && i.longitude !== null ? (
+                        <><span className="font-mono text-xs">{i.latitude.toFixed(5)}, {i.longitude.toFixed(5)}</span><CopyCoords lat={i.latitude} lon={i.longitude} /></>
+                      ) : null}
+                      <Freshness inc={i} />
+                    </div>
                   </td>
-                  <td className="px-3 py-3 text-muted">Not reported</td>
+                  <td className="px-3 py-3 whitespace-nowrap">{i.location_accuracy_m !== null ? `±${Math.round(i.location_accuracy_m)} m` : <span className="text-muted">—</span>}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">{i.location_recorded_at ? fmtTime(i.location_recorded_at) : <span className="text-muted">—</span>}</td>
                   <td className="px-3 py-3"><span className="rounded bg-ok-soft px-2 py-0.5 text-xs font-semibold text-ok">Delivered</span></td>
                   <td className="px-3 py-3"><StatePill state={i.incident_state} /></td>
                   <td className="px-3 py-3"><Path hops={i.hops} /></td>

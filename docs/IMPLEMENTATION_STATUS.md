@@ -146,6 +146,32 @@ Level: **Physical relay node, simulated sender.** Not the two-phone test.
 
 \* Removing `adb reverse` did not cut the phone's existing keep-alive connection, so the first "gateway down" run was not a real outage and was not counted.
 
+## Portable online + offline build (2026-11-21, in progress, not committed)
+
+Labels: **unit** = automated test, **integration** = real processes on the Mac, **physical** = on a phone.
+
+| Item | Result | Evidence |
+|---|---|---|
+| GPS metadata (accuracy, capture time, source, last-known) phone → gateway → backend | PASS (unit + integration) | gateway 27 tests, backend 57 tests; SOS `SM-CHECK-7e6734ea2f82` sent through the running gateway, backend `/location` returned accuracy 14.5 m, capture time unchanged, receipt time separate, freshness CURRENT |
+| Mock locations refused, no IP/demo/random fallback | PASS (code review) / NOT TESTED physically | `location.ts` returns no fix for `mocked` positions |
+| Dashboard: accuracy, capture vs receipt time, Current / Last-known / No location, copy coordinates | PASS (integration, browser) | incident page for the check SOS |
+| Authenticated location endpoint `GET /v1/admin/incidents/{id}/location` | PASS (unit + integration) | |
+| Profile editing API (fields, photo, up to 5 emergency contacts, email/phone change with code, password change) | PASS (unit) | `tests/test_profile.py`, 20 tests; protected fields (id, role, verification, email, phone) rejected with 422 |
+| Profile editing screens in the app | Built, type-checked; NOT TESTED physically | `profile/edit`, `profile/contact`, `profile/change`, `profile/password` |
+| Email/phone codes delivered | NOT AVAILABLE | no email/SMS provider; dev mode writes codes to the server log only |
+| Connection modes: online gateway (https) first, then local network; mode shown on Safety tab | Built; NOT TESTED physically | `sync.ts` |
+| Backoff 3 s → 60 s, retry on network change / app foreground | PASS (unit) / NOT TESTED physically | `scripts/test-backoff.mts` |
+| Relay forwarder backoff, heartbeat every 15 s instead of 3 s | Built; NOT TESTED physically | `relay.ts` |
+| No localhost / IP defaults in release builds | PASS (code review) | addresses come from `EXPO_PUBLIC_*` or the phone's settings |
+| Standalone release APK (local Gradle `assembleRelease`, arm64) | PASS (physical, Phone 1) | `app-release.apk`, versionCode 1 / 1.0.0, 37.9 MB, sha256 `d9ad233b…f399`; installed over the dev build with data kept, launched with **no Metro and no adb reverse**, no crash; detected mobile data + internet; showed "Not connected" because its saved addresses still point at the Mac over USB |
+| EAS cloud build | NOT RUN | needs `eas login`; profile `preview` (APK) is in `apps/mobile/eas.json` |
+| Hosted HTTPS gateway/backend | NOT DONE | needs a hosting account |
+| Nearby mesh (Nearby Connections: Bluetooth / Wi-Fi Direct, no shared network) | **PASS (physical, 3 phones)** | 2026-11-21 20:12–21:57. Phone 1 (OPPO, `MOBILE_01`) and Phone 2 (Samsung SM-S942B, `MOBILE_0DF5`) connected in ~5 s with no common network; reconnected after reinstall. 12 SOS delivered to the gateway via a third phone `MOBILE_42CB` over the internet tunnel: 6 × `MOBILE_0DF5 > MOBILE_01 > MOBILE_42CB > GATEWAY_01`, 5 × `MOBILE_01 > MOBILE_0DF5 > MOBILE_42CB > GATEWAY_01`, 1 × `MOBILE_0DF5 > MOBILE_42CB > GATEWAY_01`. SOS held on Phone 2 while it had no route were delivered later (store-and-forward). Real GPS on all (±4–12 m, current at SOS). |
+| Acknowledgement back to the sender over the mesh | **PASS (physical)** | SOS `…e248c55e` acknowledged on the dashboard at 21:56:49; the sender `MOBILE_0DF5` showed "acknowledged" on its Safety tab (reported by the tester after reopening the app). |
+| Online mode through a public HTTPS gateway | PASS (physical) | Cloudflare quick tunnels for gateway and account server; phones on mobile data reached them. Temporary: addresses change when the tunnels restart. |
+| Release 1.0.1 (build 2) | Built | sha256 `2f302bd7…dc2f62`; tunnel addresses built in. Drive upload not done from here (connector limit 10 MB, APK 38 MB). |
+| Two-phone LAN relay test (shared Wi-Fi / hotspot, RUNBOOK §5) | NOT TESTED | superseded in practice by the mesh test above; LAN relay code is unchanged |
+
 ## Scenario checklist (SignalMesh)
 
 | Scenario | Result |

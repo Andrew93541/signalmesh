@@ -13,7 +13,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import incidents, security
+from pathlib import Path
+
+from . import incidents, profile, security
 from .config import REQUIRED_CONSENTS, SEPARATE_CONSENTS, Settings, load_settings
 from .db import Database, now_iso
 from .models import ForgotIn, LoginIn, RegisterIn, ResetIn, check_password, identifier_key
@@ -52,7 +54,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---- helpers ----------------------------------------------------------------
 
     def user_json(user_id: str) -> dict:
-        u = db.one("SELECT id, full_name, email, phone, email_verified, phone_verified, created_at, role FROM users WHERE id = ?", user_id)
+        u = db.one("SELECT id, full_name, email, phone, email_verified, phone_verified, created_at, role, "
+                   "travel_preferences, trekking_experience, intro, photo_path, updated_at FROM users WHERE id = ?", user_id)
         contacts = db.all("SELECT id, name, phone, relationship FROM emergency_contacts WHERE user_id = ? ORDER BY created_at", user_id)
         consents = db.all(
             "SELECT consent_type, document_version, accepted, recorded_at FROM consents WHERE user_id = ? ORDER BY id", user_id)
@@ -61,6 +64,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "email_verified": bool(u["email_verified"]), "phone_verified": bool(u["phone_verified"]),
             "created_at": u["created_at"],
             "role": u["role"],
+            "travel_preferences": u["travel_preferences"], "trekking_experience": u["trekking_experience"],
+            "intro": u["intro"], "has_photo": bool(u["photo_path"]), "updated_at": u["updated_at"],
             "emergency_contacts": [dict(c) for c in contacts],
             "consents": [{**dict(c), "accepted": bool(c["accepted"])} for c in consents],
         }
@@ -210,5 +215,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.run("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", now, user["id"])  # sign out everywhere
         return {"status": "ok"}
 
+    profile.register(app, db, settings, current_user, user_json, deliver_code, Path(settings.photo_dir))
     app.state.hub = incidents.register(app, db, settings, current_user)
     return app

@@ -84,6 +84,7 @@ const LINK_TEXT = {
   online: ['Connected to next hop', C.ok],
   unreachable: ['No route: SOS will be stored and retried', C.warn],
   simulated_offline: ['Simulated no signal (Settings)', C.warn],
+  not_configured: ['No safety station address set up', C.warn],
 } as const;
 
 export function LinkBanner() {

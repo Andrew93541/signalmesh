@@ -10,6 +10,12 @@ import type { Relationship } from './smsText';
 
 export const LEGAL = { TERMS_OF_SERVICE: '2026-11-21-draft', PRIVACY_POLICY: '2026-11-21-draft' } as const;
 
+export type Experience = 'NONE' | 'BEGINNER' | 'INTERMEDIATE' | 'EXPERIENCED' | 'EXPERT';
+export const EXPERIENCE_LABEL: Record<Experience, string> = {
+  NONE: 'New to trekking', BEGINNER: 'Beginner', INTERMEDIATE: 'Intermediate', EXPERIENCED: 'Experienced', EXPERT: 'Expert / guide',
+};
+export interface EmergencyContact { id: string; name: string; phone: string; relationship: Relationship }
+
 export interface Account {
   id: string;
   full_name: string;
@@ -17,7 +23,13 @@ export interface Account {
   phone: string;
   email_verified: boolean;
   phone_verified: boolean;
-  emergency_contacts: { id: string; name: string; phone: string; relationship: Relationship }[];
+  role?: string;
+  travel_preferences?: string | null;
+  trekking_experience?: Experience | null;
+  intro?: string | null;
+  has_photo?: boolean;
+  updated_at?: string | null;
+  emergency_contacts: EmergencyContact[];
   consents: { consent_type: string; document_version: string; accepted: boolean; recorded_at: string }[];
 }
 
@@ -33,8 +45,11 @@ export class ApiError extends Error {
   }
 }
 
+export const backendBase = () => prefsStore.get().backendUrl.trim().replace(/\/+$/, '');
+
 async function api<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
-  const base = prefsStore.get().backendUrl.trim().replace(/\/+$/, '');
+  const base = backendBase();
+  if (!base) throw new ApiError('No account server is set up. Add its address under "Account server settings".', 0);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -137,3 +152,62 @@ export const resetPassword = (identifier: string, code: string, new_password: st
 let draft: Registration | null = null;
 export const setRegistrationDraft = (r: Registration | null) => { draft = r; };
 export const getRegistrationDraft = () => draft;
+
+// ---- Profile editing (signed-in only). Every call returns the server's copy of
+// the account, which replaces the local one: the screen never shows a local guess.
+
+async function authed(path: string, init: RequestInit = {}): Promise<Account> {
+  const s = sessionStore.get().session;
+  if (!s) throw new ApiError('Sign in first.', 401);
+  try {
+    const user = await api<Account>(path, init, s.token);
+    await persist({ token: s.token, user });
+    return user;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) await persist(null);
+    throw e;
+  }
+}
+
+export type ProfileChanges = Partial<Pick<Account, 'full_name' | 'travel_preferences' | 'trekking_experience' | 'intro'>>;
+export const updateProfile = (changes: ProfileChanges) =>
+  authed('/v1/users/me', { method: 'PATCH', body: JSON.stringify(changes) });
+
+/** Uploads raw image bytes; the server checks type, signature and the 2 MB limit. */
+export const uploadPhoto = (base64: string, mimeType: string) => {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return authed('/v1/users/me/photo', { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': mimeType } });
+};
+export const deletePhoto = () => authed('/v1/users/me/photo', { method: 'DELETE' });
+/** Image source for the signed-in user's photo (auth header; never a public URL). */
+export function photoSource(user: Account | undefined) {
+  const s = sessionStore.get().session;
+  if (!user?.has_photo || !s) return null;
+  return { uri: `${backendBase()}/v1/users/me/photo?v=${encodeURIComponent(user.updated_at ?? '')}`, headers: { Authorization: `Bearer ${s.token}` } };
+}
+
+type ContactBody = Omit<EmergencyContact, 'id'>;
+export const addEmergencyContact = (c: ContactBody) =>
+  authed('/v1/users/me/emergency-contacts', { method: 'POST', body: JSON.stringify(c) });
+export const editEmergencyContact = (id: string, c: ContactBody) =>
+  authed(`/v1/users/me/emergency-contacts/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(c) });
+export const deleteEmergencyContact = (id: string) =>
+  authed(`/v1/users/me/emergency-contacts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export type ChangeKind = 'email' | 'phone';
+export function startContactChange(kind: ChangeKind, value: string, current_password: string) {
+  const s = sessionStore.get().session;
+  if (!s) return Promise.reject(new ApiError('Sign in first.', 401));
+  return api<{ status: string; expires_in_minutes: number; delivery: 'dev-log' | 'not-configured' }>(
+    `/v1/users/me/${kind}-change`, { method: 'POST', body: JSON.stringify({ value, current_password }) }, s.token);
+}
+export const confirmContactChange = (kind: ChangeKind, code: string) =>
+  authed(`/v1/users/me/${kind}-change/confirm`, { method: 'POST', body: JSON.stringify({ code }) });
+
+export function changePassword(current_password: string, new_password: string) {
+  const s = sessionStore.get().session;
+  if (!s) return Promise.reject(new ApiError('Sign in first.', 401));
+  return api<{ status: string }>('/v1/users/me/password', { method: 'POST', body: JSON.stringify({ current_password, new_password }) }, s.token);
+}

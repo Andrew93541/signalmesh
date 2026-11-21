@@ -51,10 +51,10 @@ export async function checkIn() {
 }
 
 /** Called by the sync loop. Throws if the next hop is unreachable. */
-export async function flushCheckin() {
+export async function flushCheckin(client: Pick<typeof gateway, "checkin"> = gateway) {
   const { pending } = checkinStore.get();
   if (!pending) return;
-  await gateway.checkin(pending);
+  await client.checkin(pending);
   // Only clear it if no newer check-in replaced it while the request was in flight.
   if (checkinStore.get().pending === pending) save({ ...checkinStore.get(), pending: null });
 }

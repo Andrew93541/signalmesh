@@ -2,6 +2,7 @@
 
 import Storage from 'expo-sqlite/kv-store';
 
+import { preferBuiltAddress } from '@/lib/backoff';
 import { createStore } from '@/lib/store';
 
 export type Mode = 'TOURIST' | 'TREKKER';
@@ -14,12 +15,14 @@ export interface Prefs {
 }
 
 const KEY = 'trackmate.prefs';
-const DEFAULTS: Prefs = { mode: null, onboardingDone: false, guest: false, backendUrl: 'http://127.0.0.1:8100' };
+const DEFAULTS: Prefs = { mode: null, onboardingDone: false, guest: false, backendUrl: process.env.EXPO_PUBLIC_BACKEND_URL ?? (__DEV__ ? 'http://127.0.0.1:8100' : '') };
 
 function read(): Prefs {
   try {
     const raw = Storage.getItemSync(KEY);
-    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : DEFAULTS;
+    if (!raw) return DEFAULTS;
+    const saved = { ...DEFAULTS, ...JSON.parse(raw) };
+    return { ...saved, backendUrl: preferBuiltAddress(saved.backendUrl, process.env.EXPO_PUBLIC_BACKEND_URL) };
   } catch {
     return DEFAULTS;
   }

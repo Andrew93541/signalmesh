@@ -9,10 +9,12 @@ import { alarmStore, setAlarm } from '@/lib/alarm';
 import { checkIn, checkinStore, msUntilDue } from '@/lib/checkin';
 import { CATEGORIES, DEFAULT_PRIORITY, PRIORITIES, type Category, type Priority } from '@/lib/contract';
 import { ensureLocationPermission, getFix } from '@/lib/location';
+import { meshStore } from '@/lib/mesh';
 import { createSos, outboxStore } from '@/lib/outbox';
 import { settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
-import { linkStore, syncNow } from '@/lib/sync';
+import { ROUTE_LABEL, linkStore, syncNow } from '@/lib/sync';
+import { sessionStore } from '@/trackmate/auth';
 import { contactsStore } from '@/trackmate/contacts';
 import { describeStatus, isOpen } from '@/trackmate/sosStatus';
 import { Banner, Button, Card, Chip, Row, Screen, Section, Txt, s } from '@/ui/kit';
@@ -35,6 +37,7 @@ export default function Safety() {
   const checkin = useStore(checkinStore);
   const alarmOn = useStore(alarmStore);
   const link = useStore(linkStore);
+  const mesh = useStore(meshStore);
   const contacts = useStore(contactsStore);
   const now = useNow(10_000);
 
@@ -56,8 +59,13 @@ export default function Safety() {
     if (sending) return;
     setSending(true);
     try {
-      const fix = await getFix();
-      const message = createSos({ category, priority, ...fix }); // saved locally before any network call
+      const { unavailableReason: _reason, ...fix } = await getFix();
+      const account = sessionStore.get().session?.user;
+      const message = createSos({
+        category, priority, ...fix,
+        user_id: account?.id ?? null,
+        worker_name: account?.full_name,
+      }); // saved locally before any network call
       syncNow();
       router.push({ pathname: '/sos/[id]', params: { id: message.message_id } });
     } finally {
@@ -113,9 +121,14 @@ export default function Safety() {
         <Button label="Turn on location" kind="secondary" icon="my_location"
           onPress={() => void ensureLocationPermission().then(setLocationOn)} />
       ) : null}
-      {link.state !== 'online' && link.state !== 'checking' ? (
-        <Banner tone="warning" icon="wifi_off" title="No connection right now"
-          body="An SOS is saved on your phone first and sent automatically as soon as a connection is available." />
+      {link.state === 'online' && link.route ? (
+        <Txt v="footnote" c={color.text2} style={{ textAlign: 'center' }}>Sending via {ROUTE_LABEL[link.route]}</Txt>
+      ) : link.state !== 'checking' && mesh.peers.length ? (
+        <Banner tone="info" icon="bluetooth" title={`No signal · ${mesh.peers.length} nearby phone${mesh.peers.length === 1 ? '' : 's'} connected`}
+          body="An SOS is passed to nearby TrackMate phones, and the first one with a connection delivers it." />
+      ) : link.state !== 'checking' ? (
+        <Banner tone="warning" icon="wifi_off" title={link.state === 'not_configured' ? 'No safety station set up' : 'No connection right now'}
+          body={`An SOS is saved on your phone first and sent automatically as soon as a connection is available.${link.nextRetryAt ? ' Retrying automatically.' : ''}`} />
       ) : null}
 
       <Section title="Check-in">

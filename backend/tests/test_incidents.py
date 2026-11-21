@@ -164,3 +164,47 @@ def test_migration_from_v1_database(tmp_path):
     db = Database(path)
     assert db.schema_version == len(MIGRATIONS)
     assert db.one("SELECT role FROM users WHERE id = 'u1'")["role"] == "user"  # existing data kept
+
+
+GPS = {"latitude": 19.0334226, "longitude": 73.0638, "location_accuracy_m": 12.5,
+       "location_recorded_at": "2026-11-21T09:59:58.000Z", "location_source": "DEVICE", "location_is_last_known": False}
+
+
+def test_location_metadata_stored_unchanged_with_freshness(env):
+    c, gw, h = env["c"], env["gw"], env["resp"]
+    c.post("/gateway/sos", json=sos(**GPS), headers=gw)
+    loc = c.get("/v1/admin/incidents/SM-incident-001/location", headers=h).json()
+    assert (loc["latitude"], loc["longitude"], loc["accuracy_m"]) == (19.0334226, 73.0638, 12.5)
+    assert loc["recorded_at"] == "2026-11-21T09:59:58.000Z" and loc["received_at"] != loc["recorded_at"]
+    assert loc["freshness"] == "CURRENT" and loc["is_last_known"] is False and loc["source"] == "DEVICE"
+    assert c.get("/v1/admin/incidents/SM-incident-001/location", headers=env["user"]).status_code == 403
+
+
+@pytest.mark.parametrize("over,expected", [
+    ({"location_is_last_known": True, "location_source": "DEVICE_LAST_KNOWN"}, "LAST_KNOWN"),
+    ({"location_recorded_at": "2026-11-21T09:30:00.000Z"}, "LAST_KNOWN"),  # 30 min before the SOS
+    ({"location_recorded_at": None, "location_accuracy_m": None}, "LAST_KNOWN"),  # old app: no capture time
+    ({"latitude": None, "longitude": None, "location_recorded_at": None, "location_accuracy_m": None,
+      "location_source": None, "location_is_last_known": None}, "NONE"),
+])
+def test_freshness_is_never_overstated(env, over, expected):
+    c = env["c"]
+    c.post("/gateway/sos", json=sos(**{**GPS, **over}), headers=env["gw"])
+    assert c.get("/v1/admin/incidents/SM-incident-001", headers=env["resp"]).json()["location_freshness"] == expected
+
+
+def test_metadata_without_coordinates_rejected(env):
+    bad = {**GPS, "latitude": None, "longitude": None}
+    assert env["c"].post("/gateway/sos", json=sos(**bad), headers=env["gw"]).status_code == 422
+
+
+def test_incident_links_to_real_account_and_shows_only_needed_details(env):
+    c, h = env["c"], env["resp"]
+    uid = c.get("/v1/auth/me", headers=env["user"]).json()["id"]
+    c.post("/gateway/sos", json=sos(user_id=uid), headers=env["gw"])
+    c.post("/gateway/sos", json=sos("SM-incident-002", user_id="not-a-user"), headers=env["gw"])
+    inc = c.get("/v1/admin/incidents/SM-incident-001", headers=h).json()
+    assert inc["person"]["full_name"] == "Ravi Kumar" and inc["person"]["phone"] == "+919876543210"
+    assert inc["person"]["emergency_contacts"][0]["name"] == "Asha Kumar"
+    assert "email" not in inc["person"] and "password_hash" not in str(inc)
+    assert c.get("/v1/admin/incidents/SM-incident-002", headers=h).json()["person"] is None

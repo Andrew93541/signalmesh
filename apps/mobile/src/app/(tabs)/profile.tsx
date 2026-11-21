@@ -1,9 +1,10 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Alert, View } from 'react-native';
 
 import { settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
-import { logout, sessionStore } from '@/trackmate/auth';
+import { EXPERIENCE_LABEL, logout, photoSource, sessionStore } from '@/trackmate/auth';
 import { MODE_LABEL, prefsStore, savePrefs, setMode, type Mode } from '@/trackmate/prefs';
 import { Card, Chip, Icon, Row, Screen, Section, Txt, s } from '@/ui/kit';
 import { color, space } from '@/ui/theme';
@@ -12,12 +13,14 @@ export default function Profile() {
   const { mode } = useStore(prefsStore);
   const settings = useStore(settingsStore);
   const { session } = useStore(sessionStore);
+  const photo = photoSource(session?.user);
 
   return (
     <Screen tab>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.l }}>
-        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: color.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Txt v="title1" c={color.primary}>{settings.workerName.slice(0, 1).toUpperCase()}</Txt>
+        <View style={{ width: 64, height: 64, borderRadius: 32, overflow: 'hidden', backgroundColor: color.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+          {photo ? <Image source={photo} style={{ width: 64, height: 64 }} contentFit="cover" accessibilityLabel="Your profile photo" />
+            : <Txt v="title1" c={color.primary}>{(session?.user.full_name ?? settings.workerName).slice(0, 1).toUpperCase()}</Txt>}
         </View>
         <View style={{ flex: 1 }}>
           <Txt v="title1">{session?.user.full_name ?? settings.workerName}</Txt>
@@ -29,10 +32,12 @@ export default function Profile() {
         <Card>
           {session ? (
             <>
-              <Row icon="person" title={session.user.full_name}
-                subtitle={`${session.user.email} · ${session.user.phone}`} />
-              <Row icon="info" title="Email and phone not verified"
-                subtitle="Verification messages aren't set up in this test version yet." />
+              <Row icon="edit" title="Edit profile"
+                subtitle={[session.user.trekking_experience ? EXPERIENCE_LABEL[session.user.trekking_experience] : null,
+                  `${session.user.emergency_contacts.length} emergency contact${session.user.emergency_contacts.length === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
+                onPress={() => router.push('/profile/edit')} />
+              <Row icon="mail" title={session.user.email} subtitle={session.user.email_verified ? 'Email verified' : 'Email not verified'} />
+              <Row icon="call" title={session.user.phone} subtitle={session.user.phone_verified ? 'Phone verified' : 'Phone not verified'} />
               <Row icon="logout" title="Sign out" danger
                 onPress={() => Alert.alert('Sign out?', 'Journeys, contacts and SOS history stay on this phone. SOS keeps working.', [
                   { text: 'Cancel', style: 'cancel' },

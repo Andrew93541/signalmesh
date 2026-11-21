@@ -56,6 +56,13 @@ the gateway", never as "help is coming".
 | `hops` | node IDs in order, sender first. Each relay **appends itself** before forwarding. Max 16. |
 | `hop_count` | number of relays the message passed through (= `len(hops) - 1` when it leaves a relay) |
 | `status` | informational on input; each hop sets its own status |
+| `location_accuracy_m` | *v1.1, optional.* Horizontal accuracy (m) reported by the phone, 0–100 000. |
+| `location_recorded_at` | *v1.1, optional.* ISO-8601 time the phone captured the fix (not the send time). Preserved unchanged by every hop. |
+| `location_source` | *v1.1, optional.* `DEVICE` (fresh fix at SOS time) \| `DEVICE_LAST_KNOWN` (no fresh fix; the phone's cached position). Anything else is rejected (422). |
+| `location_is_last_known` | *v1.1, optional.* `true` when the coordinates are the cached position. |
+| `user_id` | *v1.1, optional.* TrackMate account id when the sender is signed in; the backend links it only if the account exists. |
+
+v1.1 fields are additive: older senders omit them and stay valid. Location metadata sent **without** coordinates is rejected (422). Mock (developer-option) locations are never sent. The backend computes `location_freshness`: `CURRENT` when not last-known and captured ≤ 120 s before `created_at`, `LAST_KNOWN` otherwise, `NONE` without coordinates.
 
 ## Endpoints on every hop (relay and gateway)
 

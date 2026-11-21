@@ -16,6 +16,7 @@ class Settings:
     lockout_minutes: int = 15  # ...within this window
     node_id: str = "BACKEND_01"  # added to an incident's hop path when stored here
     gateway_online_seconds: int = 30
+    photo_dir: str = "data/photos"  # profile photos; never served publicly
 
 
 # Legal document versions the app must accept. Drafts until legal review.
@@ -35,4 +36,5 @@ def load_settings() -> Settings:
         cors_origins=tuple(o.strip() for o in env("TRACKMATE_CORS_ORIGINS", "*").split(",") if o.strip()),
         auth_rate_per_minute=int(env("TRACKMATE_AUTH_RATE_PER_MINUTE", "30")),
         node_id=env("TRACKMATE_NODE_ID", "BACKEND_01"),
+        photo_dir=env("TRACKMATE_PHOTO_DIR", "data/photos"),
     )

@@ -70,16 +70,28 @@ export function createSos(input: {
   priority: Priority;
   latitude: number | null;
   longitude: number | null;
+  location_accuracy_m?: number | null;
+  location_recorded_at?: string | null;
+  location_source?: SosMessage['location_source'];
+  location_is_last_known?: boolean | null;
+  user_id?: string | null;
+  worker_name?: string;
 }): SosMessage {
   const { deviceId, workerName } = getSettings();
+  const hasFix = input.latitude !== null && input.longitude !== null;
   const message: SosMessage = {
-    message_id: `SM-${randomUUID()}`,
+    message_id: `SM-${randomUUID()}`, // created once; every retry and hop reuses it
     device_id: deviceId,
-    worker_name: workerName,
+    worker_name: input.worker_name || workerName,
     category: input.category,
     priority: input.priority,
     latitude: input.latitude,
     longitude: input.longitude,
+    location_accuracy_m: hasFix ? input.location_accuracy_m ?? null : null,
+    location_recorded_at: hasFix ? input.location_recorded_at ?? null : null,
+    location_source: hasFix ? input.location_source ?? null : null,
+    location_is_last_known: hasFix ? input.location_is_last_known ?? null : null,
+    user_id: input.user_id ?? null,
     created_at: new Date().toISOString(),
     hop_count: 0,
     hops: [deviceId],
@@ -136,9 +148,13 @@ export function markFailed(messageId: string, error: string) {
   refresh();
 }
 
+const STATUS_RANK: Record<string, number> = { QUEUED: -1, CREATED: 0, RELAYED: 1, DELIVERED: 2, ACKNOWLEDGED: 3, RESOLVED: 4 };
+export const statusRank = (s: string | null | undefined) => (s ? (STATUS_RANK[s] ?? -1) : -1);
+
 export function applyAckStatus(messageId: string, ack: AckStatus) {
   const item = outboxStore.get().find((i) => i.message.message_id === messageId);
-  if (!item || item.status === ack.status) return;
+  // Statuses only move forward: a slower route answering "RELAYED" never undoes "ACKNOWLEDGED".
+  if (!item || statusRank(ack.status) <= statusRank(item.status)) return;
   db.runSync(
     'UPDATE outbox SET status = ?, acknowledged_by = ?, acknowledged_at = ? WHERE message_id = ?',
     ack.status,

@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS nodes (
 
 OPEN_STATUSES = ("RELAYED", "DELIVERED", "ACKNOWLEDGED")
 
+# Columns added after the first release; created on start if missing (keeps existing data).
+ADDED_COLUMNS = {
+    "messages": [
+        ("location_accuracy_m", "REAL"),
+        ("location_recorded_at", "TEXT"),
+        ("location_source", "TEXT"),
+        ("location_is_last_known", "INTEGER"),
+        ("user_id", "TEXT"),
+    ],
+}
+LOCATION_FIELDS = ("location_accuracy_m", "location_recorded_at", "location_source", "location_is_last_known", "user_id")
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -86,6 +98,8 @@ def parse(value: str) -> datetime:
 def _message(row: sqlite3.Row) -> dict:
     d = dict(row)
     d["hops"] = json.loads(d["hops"])
+    if d.get("location_is_last_known") is not None:
+        d["location_is_last_known"] = bool(d["location_is_last_known"])
     return d
 
 
@@ -99,6 +113,11 @@ class Store:
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.executescript(SCHEMA)
+            for table, cols in ADDED_COLUMNS.items():
+                have = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})")}
+                for name, kind in cols:
+                    if name not in have:
+                        self._db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
 
     def ping(self) -> bool:
         try:
@@ -139,11 +158,14 @@ class Store:
                 self._db.execute(
                     """INSERT INTO messages (message_id, device_id, worker_name, category, priority,
                        description, latitude, longitude, created_at, received_at, hop_count, hops,
-                       received_from, status, upstream_state)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       received_from, status, upstream_state, location_accuracy_m, location_recorded_at,
+                       location_source, location_is_last_known, user_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (sos.message_id, sos.device_id, sos.worker_name, sos.category, sos.priority,
                      sos.description, sos.latitude, sos.longitude, sos.created_at, now, sos.hop_count,
-                     json.dumps(path), received_from, status, "PENDING" if upstream else "NONE"),
+                     json.dumps(path), received_from, status, "PENDING" if upstream else "NONE",
+                     sos.location_accuracy_m, sos.location_recorded_at, sos.location_source,
+                     None if sos.location_is_last_known is None else int(sos.location_is_last_known), sos.user_id),
                 )
                 self._event(sos.message_id, "RECEIVED", received_from, {"hops": sos.hops}, now)
                 self._db.execute("COMMIT")

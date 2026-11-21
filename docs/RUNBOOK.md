@@ -55,6 +55,26 @@ npm run dev:mobile                                           # Metro, from repo 
 ```
 Over USB, forward Metro: `adb -s <serial> reverse tcp:8081 tcp:8081`.
 
+## 4b. Standalone release APK (no Metro, no USB, no Mac localhost)
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+cd apps/mobile && npx expo prebuild --platform android --no-install
+cd android && NODE_ENV=production ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+adb -s <serial> install -r app/build/outputs/apk/release/app-release.apk
+```
+Cloud alternative (needs `npx eas-cli login` first): `npx eas-cli build --platform android --profile preview` (APK; profile in `apps/mobile/eas.json`).
+
+Addresses are **not** built in. Optional build-time values: `EXPO_PUBLIC_ONLINE_GATEWAY_URL` (https only), `EXPO_PUBLIC_BACKEND_URL`, `EXPO_PUBLIC_LOCAL_GATEWAY_URL`. Otherwise set them on the phone:
+- Sign-in screen → **Account server settings** → account server address.
+- Profile → Connection settings → **Online gateway (internet)** (https) and **Local network address (offline mode)**.
+
+Signing: the local release build uses the Expo template's debug keystore (`android/app/debug.keystore`). Fine for testing; a store release needs a real upload key (not set up; ask before changing).
+
+### Connection modes on the phone
+The app tries the **online gateway** first when the phone has internet, then the **local network address** (a relay phone or the station). The Safety tab shows "Sending via Internet (online gateway)" or "Sending via Local network (offline mode)". Failures back off 3 s → 6 s → … → 60 s; a Wi-Fi/data/hotspot change, opening the app, or a new SOS retries at once. The same `message_id` is used on every route and retry, so the backend stores each SOS once.
+
 ## 5. Physical two-phone test
 
 Network: **one Wi-Fi network or a hotspot** that lets clients reach each other.

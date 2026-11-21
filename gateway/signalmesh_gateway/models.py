@@ -41,8 +41,25 @@ class SosIn(_Located):
     hop_count: int = Field(default=0, ge=0, le=16)
     hops: list[NodeId] = Field(default_factory=list, max_length=16)
     status: str | None = None  # informational; each hop sets its own
+    # Location metadata (v1.1, additive). Kept exactly as the phone captured it.
+    location_accuracy_m: float | None = Field(default=None, ge=0, le=100_000)
+    location_recorded_at: str | None = None
+    location_source: Literal["DEVICE", "DEVICE_LAST_KNOWN"] | None = None
+    location_is_last_known: bool | None = None
+    user_id: str | None = Field(default=None, max_length=64)
 
     _iso = field_validator("created_at")(_check_iso)
+
+    @field_validator("location_recorded_at")
+    @classmethod
+    def _loc_iso(cls, v):
+        return _check_iso(v) if v is not None else v
+
+    @model_validator(mode="after")
+    def _metadata_needs_fix(self):
+        if self.latitude is None and (self.location_accuracy_m is not None or self.location_recorded_at is not None):
+            raise ValueError("location metadata without coordinates")
+        return self
 
 
 class CheckinIn(_Located):

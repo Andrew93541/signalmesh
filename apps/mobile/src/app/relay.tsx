@@ -1,5 +1,6 @@
 import { Alert, View } from 'react-native';
 
+import { meshStore } from '@/lib/mesh';
 import { clearRelayQueue, relayStore, startRelay, stopRelay, type RelayItemState } from '@/lib/relay';
 import { saveSettings, settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
@@ -17,6 +18,7 @@ export default function HelpOthers() {
   const settings = useStore(settingsStore);
   const relay = useStore(relayStore);
   const link = useStore(linkStore);
+  const mesh = useStore(meshStore);
   const waiting = relay.items.filter((i) => i.state === 'PENDING').length;
   const forwarded = relay.items.filter((i) => i.state === 'FORWARDED').length;
 
@@ -42,10 +44,38 @@ export default function HelpOthers() {
         Let nearby TrackMate phones send their SOS through this phone. Each message is saved here first, then passed on to the safety station.
       </Txt>
 
+      <Section title="Nearby phones (Bluetooth / Wi-Fi Direct)">
+        <Card>
+          <SwitchRow title="Nearby mesh"
+            subtitle={!mesh.available ? 'Not in this build' : mesh.running ? `On · ${mesh.peers.length} phone${mesh.peers.length === 1 ? '' : 's'} connected` : 'Off'}
+            value={settings.meshEnabled} onChange={(on) => saveSettings({ meshEnabled: on })} />
+        </Card>
+        <Txt v="footnote" c={color.text2}>
+          Works with no Wi-Fi, hotspot or signal. Phones with TrackMate open find each other and pass SOS messages along;
+          the first phone that gets any connection delivers them to the safety station. Range is roughly a room to a few tens of metres.
+        </Txt>
+        {mesh.error ? <Banner tone="critical" icon="error" title="Nearby mesh" body={mesh.error} /> : null}
+        {mesh.peers.map((p) => (
+          <Card key={p.endpointId}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Txt v="headline">{p.node}</Txt>
+              <Txt v="footnote" c={p.online ? color.success : color.text2}>{p.online ? 'Has a connection' : p.online === false ? 'Offline' : 'Connected'}</Txt>
+            </View>
+          </Card>
+        ))}
+        {mesh.log.length ? (
+          <Card tone="surface">
+            {mesh.log.slice(0, 8).map((l, i) => <Txt key={i} v="caption" c={color.text2}>{l}</Txt>)}
+          </Card>
+        ) : null}
+      </Section>
+
+      <Section title="Shared Wi-Fi or hotspot">
       <Card>
         <SwitchRow title="Help others" subtitle={relay.running ? 'On: this phone is passing messages on' : 'Off'}
           value={settings.relayEnabled} onChange={toggle} />
       </Card>
+      </Section>
 
       {relay.error ? <Banner tone="critical" icon="error" title="Could not start" body={relay.error} /> : null}
 
@@ -66,7 +96,7 @@ export default function HelpOthers() {
           <View style={{ flexDirection: 'row', gap: space.s, alignItems: 'flex-start' }}>
             <Icon name="info" size={18} tint={color.text2} />
             <Txt v="footnote" c={color.text2} style={{ flex: 1 }}>
-              Keep this phone plugged in with TrackMate open. Works over a shared Wi-Fi network or this phone&apos;s hotspot; it is not Bluetooth mesh.
+              Keep this phone plugged in with TrackMate open. This part works over a shared Wi-Fi network or this phone&apos;s hotspot. The nearby mesh above needs no network.
             </Txt>
           </View>
         </>

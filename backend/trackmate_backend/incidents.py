@@ -40,11 +40,17 @@ class IncomingSos(BaseModel):
     created_at: str
     hop_count: int = Field(default=0, ge=0, le=16)
     hops: list[Annotated[str, StringConstraints(min_length=1, max_length=64)]] = Field(default_factory=list, max_length=16)
+    location_accuracy_m: float | None = Field(default=None, ge=0, le=100_000)
+    location_recorded_at: str | None = None
+    location_source: Literal["DEVICE", "DEVICE_LAST_KNOWN"] | None = None
+    location_is_last_known: bool | None = None
+    user_id: str | None = Field(default=None, max_length=64)
 
-    @field_validator("created_at")
+    @field_validator("created_at", "location_recorded_at")
     @classmethod
     def _iso(cls, v):
-        datetime.fromisoformat(v.replace("Z", "+00:00"))
+        if v is not None:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
         return v
 
 
@@ -77,9 +83,34 @@ class Hub:
                 self.clients.discard(ws)
 
 
+# A fix captured more than this long before the SOS was created is not "current".
+CURRENT_FIX_MAX_AGE_S = 120
+
+
+def _parse(iso: str) -> datetime:
+    return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+
+def location_freshness(d: dict) -> str:
+    """NONE | LAST_KNOWN | CURRENT (current = fresh fix taken when the SOS was created)."""
+    if d.get("latitude") is None or d.get("longitude") is None:
+        return "NONE"
+    if d.get("location_is_last_known"):
+        return "LAST_KNOWN"
+    rec = d.get("location_recorded_at")
+    if not rec:
+        return "LAST_KNOWN"  # older app versions sent no capture time: cannot claim it was current
+    if (_parse(d["created_at"]) - _parse(rec)).total_seconds() > CURRENT_FIX_MAX_AGE_S:
+        return "LAST_KNOWN"
+    return "CURRENT"
+
+
 def _incident(row) -> dict:
     d = dict(row)
     d["hops"] = json.loads(d["hops"])
+    if d.get("location_is_last_known") is not None:
+        d["location_is_last_known"] = bool(d["location_is_last_known"])
+    d["location_freshness"] = location_freshness(d)
     return d
 
 
@@ -141,12 +172,19 @@ def register(app: FastAPI, db: Database, settings, current_user) -> Hub:
                 response.status_code = 200
                 return {"message_id": sos.message_id, "duplicate": True, "incident_state": existing["incident_state"], "node_id": settings.node_id}
             path = [*sos.hops, settings.node_id]
+            if sos.latitude is None and (sos.location_accuracy_m is not None or sos.location_recorded_at is not None):
+                raise HTTPException(422, "location metadata without coordinates")
+            # Link to an account only if that account exists; never trust it for anything else.
+            user_id = sos.user_id if sos.user_id and db.one("SELECT 1 FROM users WHERE id = ?", sos.user_id) else None
             db.run(
                 """INSERT INTO incidents (message_id, gateway_id, device_id, worker_name, category, priority, description,
-                   latitude, longitude, created_at, received_at, hops, hop_count, incident_state)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')""",
+                   latitude, longitude, created_at, received_at, hops, hop_count, incident_state,
+                   location_accuracy_m, location_recorded_at, location_source, location_is_last_known, user_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?)""",
                 sos.message_id, gateway_id, sos.device_id, sos.worker_name, sos.category, sos.priority, sos.description,
                 sos.latitude, sos.longitude, sos.created_at, now_iso(), json.dumps(path), sos.hop_count,
+                sos.location_accuracy_m, sos.location_recorded_at, sos.location_source,
+                None if sos.location_is_last_known is None else int(sos.location_is_last_known), user_id,
             )
             event(sos.message_id, "RECEIVED", gateway_id, {"hops": sos.hops})
         inc = get_incident(sos.message_id)
@@ -248,11 +286,40 @@ def register(app: FastAPI, db: Database, settings, current_user) -> Hub:
         args.append(limit)
         return [_incident(r) for r in db.all(sql, *args)]
 
+    def person(user_id: str | None):
+        """Details a responder needs to help: name, phone and emergency contacts only."""
+        if not user_id:
+            return None
+        u = db.one("SELECT id, full_name, phone FROM users WHERE id = ?", user_id)
+        if not u:
+            return None
+        contacts = db.all("SELECT name, phone, relationship FROM emergency_contacts WHERE user_id = ? ORDER BY created_at", user_id)
+        return {**dict(u), "emergency_contacts": [dict(c) for c in contacts]}
+
     @app.get("/v1/admin/incidents/{message_id}")
     def incident_detail(message_id: str, user=Depends(responder)):
         inc = get_incident(message_id, with_events=True)
         inc["gateway"] = next((g for g in gateways_view() if g["id"] == inc["gateway_id"]), None)
+        inc["person"] = person(inc["user_id"])
         return inc
+
+    @app.get("/v1/admin/incidents/{message_id}/location")
+    def incident_location(message_id: str, user=Depends(responder)):
+        inc = get_incident(message_id)
+        age = None
+        if inc["location_recorded_at"]:
+            age = int((datetime.now(timezone.utc) - _parse(inc["location_recorded_at"])).total_seconds())
+        return {
+            "message_id": message_id,
+            "latitude": inc["latitude"], "longitude": inc["longitude"],
+            "accuracy_m": inc["location_accuracy_m"],
+            "recorded_at": inc["location_recorded_at"],  # captured by the phone
+            "received_at": inc["received_at"],  # stored by this backend
+            "source": inc["location_source"],
+            "is_last_known": inc["location_is_last_known"],
+            "freshness": inc["location_freshness"],
+            "age_seconds_now": age,
+        }
 
     async def transition(message_id: str, to: str, user: dict, request: Request, fields: dict, detail=None):
         with db.lock:

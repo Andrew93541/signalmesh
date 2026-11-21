@@ -8,6 +8,7 @@ import { ensureLocationPermission } from '@/lib/location';
 import { startRelay } from '@/lib/relay';
 import { getSettings } from '@/lib/settings';
 import { useStore } from '@/lib/store';
+import { initMesh } from '@/lib/mesh';
 import { startSync } from '@/lib/sync';
 import { restoreSession, sessionStore } from '@/trackmate/auth';
 import { prefsStore } from '@/trackmate/prefs';
@@ -29,7 +30,9 @@ export default function RootLayout() {
   useEffect(() => {
     // SignalMesh starts regardless of onboarding or sign-in: a queued SOS must keep retrying.
     startSync(); // retry loop for queued SOS, check-ins and ack polling
-    void ensureLocationPermission(); // ask up front so an SOS never waits on a permission prompt
+    // Ask up front so an SOS never waits on a permission prompt; then the nearby mesh
+    // (its Bluetooth prompt must not overlap the location one).
+    void ensureLocationPermission().finally(initMesh);
     if (getSettings().relayEnabled) void startRelay(); // a relay phone resumes relaying after a restart
     resumeActiveTracking(); // a journey left ACTIVE keeps recording when the app reopens
     void restoreSession();
@@ -68,6 +71,10 @@ export default function RootLayout() {
               <Stack.Screen name="sos-history" options={{ title: 'SOS history' }} />
               <Stack.Screen name="relay" options={{ title: 'Help others' }} />
               <Stack.Screen name="connection" options={{ title: 'Connection settings' }} />
+              <Stack.Screen name="profile/edit" options={{ title: 'Edit profile' }} />
+              <Stack.Screen name="profile/contact" options={{ title: 'Emergency contact', presentation: 'modal' }} />
+              <Stack.Screen name="profile/change" options={{ title: 'Change sign-in details' }} />
+              <Stack.Screen name="profile/password" options={{ title: 'Change password' }} />
             </Stack.Protected>
 
             {/* Always reachable */}

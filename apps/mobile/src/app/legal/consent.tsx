@@ -4,7 +4,9 @@ import { View } from 'react-native';
 
 import { addContact } from '@/trackmate/contacts';
 import { LEGAL, getRegistrationDraft, register, setRegistrationDraft } from '@/trackmate/auth';
-import { Banner, Button, Checkbox, Icon, Screen, Txt } from '@/ui/kit';
+import { useStore } from '@/lib/store';
+import { prefsStore, savePrefs } from '@/trackmate/prefs';
+import { Banner, Button, Checkbox, Icon, Screen, SettingField, Txt } from '@/ui/kit';
 import { color, space } from '@/ui/theme';
 
 export default function Consent() {
@@ -12,6 +14,7 @@ export default function Consent() {
   const [privacy, setPrivacy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { backendUrl } = useStore(prefsStore);
   const draft = getRegistrationDraft();
 
   async function create() {
@@ -64,6 +67,11 @@ export default function Consent() {
 
       {!draft ? <Banner tone="warning" icon="warning" title="Your details were not found" body="Go back and fill in the registration form." /> : null}
       {error ? <Banner tone="critical" icon="error" title="Could not create your account" body={error} /> : null}
+      {!backendUrl ? (
+        <SettingField label="Account server address" value={backendUrl} placeholder="https://api.example.org"
+          hint="Not set up in this build. Your organizer gives you this address."
+          onSave={(v) => { savePrefs({ backendUrl: v }); setError(null); }} />
+      ) : null}
 
       <Button label="Create account" icon="check_circle" onPress={create} disabled={!terms || !privacy || !draft} loading={busy} />
     </Screen>

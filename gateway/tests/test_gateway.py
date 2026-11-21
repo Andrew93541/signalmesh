@@ -268,3 +268,44 @@ def test_sync_applies_responder_actions_and_pushes_status(db_path):
         assert asyncio.run(sync_once(store, settings, {"cursor": 0}, publish,
                                      get=lambda url, token=None: (200, updates),
                                      post=lambda url, payload, token=None: (200, None))) == 0
+
+
+GPS = {"latitude": 19.0334226, "longitude": 73.0638, "location_accuracy_m": 12.5,
+       "location_recorded_at": "2026-11-21T10:41:05.000Z", "location_source": "DEVICE",
+       "location_is_last_known": False, "user_id": "user-123"}
+
+
+def test_location_metadata_is_stored_and_forwarded_unchanged(db_path):
+    settings = Settings(db_path=db_path, upstream_url="http://backend", upstream_retry_seconds=3600, sync_seconds=3600)
+    app = create_app(settings)
+    sent = []
+    with TestClient(app) as c:
+        assert c.post("/gateway/sos", json=sos(**GPS)).status_code == 201
+        m = c.get("/gateway/messages/SM-test-0001").json()
+        for k, v in GPS.items():
+            assert m[k] == v, k
+        asyncio.run(forward_upstream_once(app.state.store, settings, post=lambda url, p, token=None: sent.append(p) or (201, None)))
+    for k, v in GPS.items():
+        assert sent[0][k] == v, k
+    assert sent[0]["created_at"] == "2026-11-21T10:41:08.120Z"
+
+
+def test_location_metadata_without_coordinates_is_rejected(client):
+    bad = {**GPS, "latitude": None, "longitude": None}
+    assert client.post("/gateway/sos", json=sos(**bad)).status_code == 422
+    assert client.post("/gateway/sos", json=sos(location_source="IP_GUESS")).status_code == 422
+
+
+def test_old_database_gets_new_columns_without_losing_rows(tmp_path):
+    import sqlite3
+    path = str(tmp_path / "old.db")
+    from signalmesh_gateway.store import SCHEMA
+    con = sqlite3.connect(path)
+    con.executescript(SCHEMA)  # first-release schema, no location metadata columns
+    con.execute("""INSERT INTO messages (message_id, device_id, worker_name, category, priority, created_at, received_at,
+                   hop_count, hops, status) VALUES ('SM-old-000001','D','W','GENERAL','LOW','2026-01-01T00:00:00Z','2026-01-01T00:00:01Z',0,'[]','DELIVERED')""")
+    con.commit(); con.close()
+    with TestClient(create_app(Settings(db_path=path))) as c:
+        old = c.get("/gateway/messages/SM-old-000001").json()
+        assert old["status"] == "DELIVERED" and old["location_accuracy_m"] is None
+        assert c.post("/gateway/sos", json=sos(**GPS)).status_code == 201

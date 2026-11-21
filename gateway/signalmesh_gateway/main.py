@@ -69,7 +69,8 @@ async def forward_upstream_once(store: Store, settings: Settings, post: Callable
     for msg in store.pending_upstream():
         payload = {k: msg[k] for k in (
             "message_id", "device_id", "worker_name", "category", "priority", "description",
-            "latitude", "longitude", "created_at", "hops")}
+            "latitude", "longitude", "created_at", "hops",
+            "location_accuracy_m", "location_recorded_at", "location_source", "location_is_last_known", "user_id")}
         payload["hop_count"] = msg["hop_count"] + 1  # this gateway acts as one more hop
         payload["status"] = "RELAYED"
         try:

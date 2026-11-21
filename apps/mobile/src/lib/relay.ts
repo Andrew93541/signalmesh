@@ -10,11 +10,16 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
 import * as SQLite from 'expo-sqlite';
 
+import { backoffDelay } from './backoff';
 import { CATEGORIES, PRIORITIES, type CheckinPayload, type SosMessage } from './contract';
-import { GatewayError, gateway } from './gateway';
+import { GatewayError, gateway, gatewayAt } from './gateway';
+import { onNetworkChange } from './network';
 import { RequestParser, httpResponse, type HttpRequest } from './relay-http';
 import { getSettings } from './settings';
 import { createStore } from './store';
+import { activeRouteUrl } from './sync';
+
+type Reply = [number, any];
 
 export type RelayItemState = 'PENDING' | 'FORWARDED' | 'REJECTED';
 
@@ -103,7 +108,6 @@ const queueSize = () => relayStore.get().items.filter((i) => i.state === 'PENDIN
 
 // ---- request handling ------------------------------------------------------
 
-type Reply = [number, unknown];
 const ID_RE = /^SM-[A-Za-z0-9-]{6,64}$/;
 
 function parseJson(body: string): any {
@@ -115,13 +119,22 @@ function parseJson(body: string): any {
 }
 
 function acceptSos(body: string, from: string | null): Reply {
+  return acceptSosMessage(parseJson(body), from);
+}
+
+/**
+ * Store a SOS received from another phone (over the LAN relay or the nearby mesh):
+ * validate, ignore duplicates by message_id, append this phone to the hop path,
+ * queue it for forwarding. Same rules for both transports.
+ */
+export function acceptSosMessage(m: any, from: string | null): Reply {
   const { deviceId } = getSettings();
-  const m = parseJson(body);
   if (!m || typeof m !== 'object') return [400, { detail: 'Body must be JSON' }];
   if (typeof m.message_id !== 'string' || !ID_RE.test(m.message_id)) return [422, { detail: 'Invalid message_id' }];
   if (typeof m.device_id !== 'string' || !m.device_id) return [422, { detail: 'device_id is required' }];
   if (!CATEGORIES.includes(m.category) || !PRIORITIES.includes(m.priority)) return [422, { detail: 'Invalid category or priority' }];
   if (typeof m.created_at !== 'string') return [422, { detail: 'created_at is required' }];
+  if (Array.isArray(m.hops) && m.hops.length >= 16) return [422, { detail: 'Too many hops' }];
 
   const existing = db.getFirstSync<Pick<Row, 'next_status'>>(
     'SELECT next_status FROM relay_queue WHERE message_id = ?',
@@ -223,19 +236,25 @@ function handleConnection(socket: any) {
 
 const RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 let forwarding = false;
+let relayFailures = 0;
+let lastHeartbeat = 0;
+const HEARTBEAT_MS = 15_000;
 
 export async function forwardOnce() {
   if (forwarding || getSettings().simulateNoSignal) return;
   forwarding = true;
+  let failed = false;
   try {
     const pending = db
       .getAllSync<Row>("SELECT * FROM relay_queue WHERE state = 'PENDING' ORDER BY received_at")
       .map((r) => ({ r, m: JSON.parse(r.payload) as SosMessage }))
       .sort((a, b) => (RANK[a.m.priority] ?? 3) - (RANK[b.m.priority] ?? 3));
 
+    // Best route the sync loop found (online gateway first, then the local hop).
+    const next = activeRouteUrl() ? gatewayAt(activeRouteUrl()!) : gateway;
     for (const { m } of pending) {
       try {
-        const status = await gateway.sendSos(m);
+        const status = await next.sendSos(m);
         db.runSync(
           "UPDATE relay_queue SET state = 'FORWARDED', next_status = ?, forwarded_at = ?, attempts = attempts + 1, last_error = NULL WHERE message_id = ?",
           status,
@@ -252,7 +271,7 @@ export async function forwardOnce() {
           msg,
           m.message_id,
         );
-        if (!rejected) break; // next hop down: keep the rest queued, try again next tick
+        if (!rejected) { failed = true; break; } // next hop down: keep the rest queued, retry with backoff
       }
     }
 
@@ -266,21 +285,34 @@ export async function forwardOnce() {
       }
     }
 
-    const { deviceId, workerName } = getSettings();
-    await gateway
-      .heartbeat({ node_id: deviceId, role: 'relay', label: `${workerName}'s phone`, queue_size: queueSize() })
-      .catch(() => {});
+    if (Date.now() - lastHeartbeat >= HEARTBEAT_MS) {
+      const { deviceId, workerName } = getSettings();
+      await gateway
+        .heartbeat({ node_id: deviceId, role: 'relay', label: `${workerName}'s phone`, queue_size: queueSize() })
+        .then(() => { lastHeartbeat = Date.now(); })
+        .catch(() => {});
+    }
   } finally {
     forwarding = false;
+    relayFailures = failed ? relayFailures + 1 : 0;
     refresh();
   }
+}
+
+/** Self-scheduling loop: 2 s while messages wait, 10 s idle, backoff 3 s → 60 s while the next hop is down. */
+function scheduleForward() {
+  if (!server) return;
+  const pending = db.getFirstSync<{ n: number }>("SELECT COUNT(*) AS n FROM relay_queue WHERE state = 'PENDING'")?.n ?? 0;
+  const delay = relayFailures > 0 ? backoffDelay(relayFailures - 1) : pending > 0 ? 2_000 : 10_000;
+  loop = setTimeout(() => void forwardOnce().finally(scheduleForward), delay);
 }
 
 // ---- start / stop -------------------------------------------------------------
 
 let server: any = null;
-let loop: ReturnType<typeof setInterval> | null = null;
+let loop: ReturnType<typeof setTimeout> | null = null;
 let addressTimer: ReturnType<typeof setInterval> | null = null;
+let netUnsub: (() => void) | null = null;
 
 /**
  * The address other phones should use. expo-network returns a single device IP,
@@ -337,15 +369,18 @@ export async function startRelay() {
     console.log(`[relay] listening on 0.0.0.0:${port}, reachable at ${relayStore.get().address} (${relayStore.get().addressSource})`);
   });
   addressTimer = setInterval(() => void refreshAddress(TcpSocket), 30_000); // Wi-Fi/hotspot can change
-  loop = setInterval(() => void forwardOnce(), 3000);
+  scheduleForward();
+  netUnsub = onNetworkChange(() => { relayFailures = 0; void forwardOnce(); void refreshAddress(TcpSocket); });
   void activateKeepAwakeAsync('relay'); // a sleeping phone stops relaying
 }
 
 export function stopRelay() {
   server?.close();
   server = null;
-  if (loop) clearInterval(loop);
+  if (loop) clearTimeout(loop);
   loop = null;
+  netUnsub?.();
+  netUnsub = null;
   if (addressTimer) clearInterval(addressTimer);
   addressTimer = null;
   deactivateKeepAwake('relay');
@@ -356,5 +391,36 @@ export function stopRelay() {
 export function clearRelayQueue() {
   db.runSync('DELETE FROM relay_queue');
   db.runSync('DELETE FROM relay_checkins');
+  refresh();
+}
+
+// ---- helpers for the nearby mesh -------------------------------------------------
+
+/** Messages received from others that have not reached a gateway yet. */
+export function pendingRelayMessages(): SosMessage[] {
+  return db.getAllSync<{ payload: string }>("SELECT payload FROM relay_queue WHERE state = 'PENDING' ORDER BY received_at")
+    .map((r) => JSON.parse(r.payload));
+}
+
+/** Forwarded messages whose responder status may still change. */
+export function relayAwaitingStatus(): { message_id: string; status: string | null }[] {
+  return db.getAllSync<{ message_id: string; next_status: string | null }>(
+    "SELECT message_id, next_status FROM relay_queue WHERE state = 'FORWARDED' AND (next_status IS NULL OR next_status NOT IN ('ACKNOWLEDGED','RESOLVED'))",
+  ).map((r) => ({ message_id: r.message_id, status: r.next_status }));
+}
+
+export function relayStatuses(): { message_id: string; status: string | null }[] {
+  return db.getAllSync<{ message_id: string; next_status: string | null }>('SELECT message_id, next_status FROM relay_queue')
+    .map((r) => ({ message_id: r.message_id, status: r.next_status }));
+}
+
+export function setRelayStatus(messageId: string, status: string) {
+  const r = db.runSync('UPDATE relay_queue SET next_status = ? WHERE message_id = ?', status, messageId);
+  if (r.changes) refresh();
+}
+
+/** Mark a message as handed to another phone over the mesh (it stays PENDING so whichever phone gets online first delivers it). */
+export function noteMeshHandoff(messageId: string, to: string) {
+  db.runSync("UPDATE relay_queue SET last_error = ? WHERE message_id = ? AND state = 'PENDING'", `also passed to ${to}`, messageId);
   refresh();
 }

@@ -25,6 +25,12 @@ export interface SosMessage {
   description?: string | null; // optional, max 500 chars
   latitude: number | null; // null when the phone has no GPS fix
   longitude: number | null;
+  // Location metadata (contract v1.1, additive; older hops ignore unknown fields)
+  location_accuracy_m?: number | null; // horizontal accuracy in metres
+  location_recorded_at?: string | null; // when the phone captured the fix
+  location_source?: 'DEVICE' | 'DEVICE_LAST_KNOWN' | null;
+  location_is_last_known?: boolean | null;
+  user_id?: string | null; // TrackMate account, when the sender is signed in
   created_at: string; // ISO-8601
   hop_count: number;
   hops: string[];

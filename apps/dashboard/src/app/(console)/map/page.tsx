@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 
 import { Card, ErrorBox, PageHeader, StatePill } from "@/components/ui";
-import { fmtTime, type Incident, isStale, useLive } from "@/lib/client";
+import { fmtTime, type Incident, useLive } from "@/lib/client";
 
 const IncidentMap = dynamic(() => import("@/components/IncidentMap"), { ssr: false, loading: () => <p className="text-sm text-muted">Loading map…</p> });
 
@@ -22,7 +22,7 @@ export default function MapPage() {
         {[["#D92D36", "Awaiting acknowledgement"], ["#F47B0B", "Acknowledged"], ["#075C3B", "Dispatched"]].map(([c, l]) => (
           <span key={l} className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-full" style={{ background: c }} />{l}</span>
         ))}
-        <span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-full border-2 border-dashed border-line-strong" />Faded, dashed = location older than 15 min</span>
+        <span className="flex items-center gap-2"><span className="inline-block h-3 w-3 rounded-full border-2 border-dashed border-line-strong" />Faded, dashed = last-known location, not live</span>
       </div>
       <IncidentMap incidents={incidents} />
       <p className="mt-2 text-xs text-muted">Map tiles © OpenStreetMap contributors; they need internet. Coordinates are listed below for offline use.</p>
@@ -34,7 +34,7 @@ export default function MapPage() {
               <li key={i.message_id} className="flex flex-wrap items-center gap-2">
                 <Link href={`/incidents/${i.message_id}`} className="font-semibold text-forest underline">{i.worker_name}</Link>
                 <span className="font-mono text-xs">{i.latitude!.toFixed(5)}, {i.longitude!.toFixed(5)}</span>
-                <span className="text-muted">{fmtTime(i.created_at)}{isStale(i.created_at) ? " · stale" : ""}</span>
+                <span className="text-muted">{fmtTime(i.location_recorded_at ?? i.created_at)}{i.location_accuracy_m !== null ? ` · ±${Math.round(i.location_accuracy_m)} m` : ""}{i.location_freshness !== "CURRENT" ? " · last-known" : ""}</span>
                 <StatePill state={i.incident_state} />
               </li>
             ))}

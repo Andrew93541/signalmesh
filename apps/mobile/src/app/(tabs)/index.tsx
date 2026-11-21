@@ -6,7 +6,7 @@ import { checkinStore, msUntilDue } from '@/lib/checkin';
 import { outboxStore } from '@/lib/outbox';
 import { settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
-import { linkStore, type LinkState } from '@/lib/sync';
+import { ROUTE_LABEL, linkStore, type LinkState } from '@/lib/sync';
 import { contactsStore } from '@/trackmate/contacts';
 import { formatDate, journeysStore, todayLocal, type Journey } from '@/trackmate/journeys';
 import { MODE_LABEL, prefsStore } from '@/trackmate/prefs';
@@ -23,6 +23,7 @@ const LINK: Record<LinkState, { text: string; icon: 'wifi' | 'wifi_off' | 'hourg
   unreachable: { text: 'An SOS will be saved on your phone and sent when possible.', icon: 'wifi_off', ok: false },
   simulated_offline: { text: 'Offline test mode is on (Profile → Connection settings).', icon: 'wifi_off', ok: false },
   checking: { text: 'Checking connection…', icon: 'hourglass_empty', ok: false },
+  not_configured: { text: 'No safety station set up yet (Profile → Connection settings). An SOS is still saved on your phone.', icon: 'wifi_off', ok: false },
 };
 
 function minutes(ms: number) {
@@ -124,7 +125,7 @@ export default function Home() {
 
       <Section title="Safety status">
         <Card>
-          <Row icon={l.icon} title={l.ok ? 'Connected' : link.state === 'checking' ? 'Checking' : 'Not connected'} subtitle={l.text} />
+          <Row icon={l.icon} title={l.ok && link.route ? `Connected · ${ROUTE_LABEL[link.route]}` : link.state === 'checking' ? 'Checking' : 'Not connected'} subtitle={l.text} />
           <Row
             icon="timer"
             title="Check-in timer"
