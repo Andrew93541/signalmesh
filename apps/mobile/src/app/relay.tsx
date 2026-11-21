@@ -56,6 +56,11 @@ export default function HelpOthers() {
             <Txt v="title2" c={color.primary} style={{ fontVariant: ['tabular-nums'] }}>
               {`http://${relay.address ?? 'this phone'}:${relay.port}`}
             </Txt>
+            <Txt v="footnote" c={relay.addressSource === 'route' ? color.success : color.warningText}>
+              {relay.addressSource === 'route'
+                ? 'Address confirmed on the network that reaches the safety station.'
+                : 'Address not confirmed: check this phone is on the shared Wi-Fi or hotspot and the safety station address is set.'}
+            </Txt>
             <Txt v="footnote" c={color.text}>On the other phone: Profile → Connection settings → Safety station address.</Txt>
           </Card>
           <View style={{ flexDirection: 'row', gap: space.s, alignItems: 'flex-start' }}>

@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import security
+from . import incidents, security
 from .config import REQUIRED_CONSENTS, SEPARATE_CONSENTS, Settings, load_settings
 from .db import Database, now_iso
 from .models import ForgotIn, LoginIn, RegisterIn, ResetIn, check_password, identifier_key
@@ -52,7 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---- helpers ----------------------------------------------------------------
 
     def user_json(user_id: str) -> dict:
-        u = db.one("SELECT id, full_name, email, phone, email_verified, phone_verified, created_at FROM users WHERE id = ?", user_id)
+        u = db.one("SELECT id, full_name, email, phone, email_verified, phone_verified, created_at, role FROM users WHERE id = ?", user_id)
         contacts = db.all("SELECT id, name, phone, relationship FROM emergency_contacts WHERE user_id = ? ORDER BY created_at", user_id)
         consents = db.all(
             "SELECT consent_type, document_version, accepted, recorded_at FROM consents WHERE user_id = ? ORDER BY id", user_id)
@@ -60,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "id": u["id"], "full_name": u["full_name"], "email": u["email"], "phone": u["phone"],
             "email_verified": bool(u["email_verified"]), "phone_verified": bool(u["phone_verified"]),
             "created_at": u["created_at"],
+            "role": u["role"],
             "emergency_contacts": [dict(c) for c in contacts],
             "consents": [{**dict(c), "accepted": bool(c["accepted"])} for c in consents],
         }
@@ -155,6 +156,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(429, f"Too many failed attempts. Try again in {settings.lockout_minutes} minutes or reset your password.")
         ok = security.verify_password(user["password_hash"] if user else None, body.password)
         db.run("INSERT INTO login_attempts (identifier, ip, ok, at) VALUES (?, ?, ?, ?)", key, ip, int(ok), now_iso())
+        if user and user["role"] in incidents.RESPONDER_ROLES:
+            app.state.audit({"id": user["id"], "full_name": user["full_name"]},
+                            "responder.login" if ok else "responder.login_failed", user["id"], None, request)
         if not ok:
             log.info("failed login for %s from %s", key, ip)
             raise HTTPException(401, GENERIC_LOGIN_ERROR)
@@ -206,4 +210,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.run("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", now, user["id"])  # sign out everywhere
         return {"status": "ok"}
 
+    app.state.hub = incidents.register(app, db, settings, current_user)
     return app

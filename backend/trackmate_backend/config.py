@@ -14,6 +14,8 @@ class Settings:
     auth_rate_per_minute: int = 30  # per client IP, /v1/auth/*
     lockout_failures: int = 5  # failed logins per identifier...
     lockout_minutes: int = 15  # ...within this window
+    node_id: str = "BACKEND_01"  # added to an incident's hop path when stored here
+    gateway_online_seconds: int = 30
 
 
 # Legal document versions the app must accept. Drafts until legal review.
@@ -32,4 +34,5 @@ def load_settings() -> Settings:
         dev_mode=env("TRACKMATE_DEV_MODE", "0") == "1",
         cors_origins=tuple(o.strip() for o in env("TRACKMATE_CORS_ORIGINS", "*").split(",") if o.strip()),
         auth_rate_per_minute=int(env("TRACKMATE_AUTH_RATE_PER_MINUTE", "30")),
+        node_id=env("TRACKMATE_NODE_ID", "BACKEND_01"),
     )

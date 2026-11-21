@@ -219,7 +219,8 @@ class Store:
                    SUM(status IN ('RELAYED','DELIVERED')) AS awaiting_ack,
                    SUM(status = 'ACKNOWLEDGED') AS acknowledged,
                    SUM(status = 'RESOLVED') AS resolved,
-                   SUM(upstream_state = 'PENDING') AS upstream_pending
+                   SUM(upstream_state = 'PENDING') AS upstream_pending,
+                   SUM(upstream_state = 'REJECTED') AS upstream_rejected
                    FROM messages"""
             ).fetchone()
         return {k: (r[k] or 0) for k in r.keys()}
@@ -245,6 +246,15 @@ class Store:
             )
             if ok:
                 self._event(message_id, "FORWARDED_UPSTREAM", None, None, iso(utcnow()))
+
+    def mark_upstream_rejected(self, message_id: str, error: str):
+        """Upstream refused this payload permanently; keep it locally, stop retrying."""
+        with self._lock:
+            self._db.execute(
+                "UPDATE messages SET upstream_state = 'REJECTED', upstream_attempts = upstream_attempts + 1, upstream_error = ? WHERE message_id = ?",
+                (error, message_id),
+            )
+            self._event(message_id, "UPSTREAM_REJECTED", None, {"error": error}, iso(utcnow()))
 
     # ---- check-ins ----------------------------------------------------------
 

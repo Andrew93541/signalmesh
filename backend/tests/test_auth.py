@@ -128,7 +128,8 @@ def test_session_survives_restart(tmp_path):
         token = c.post("/v1/auth/register", json=reg()).json()["token"]
     with TestClient(create_app(s)) as c:
         assert c.get("/v1/auth/me", headers=auth(token)).status_code == 200
-        assert c.app.state.db.schema_version == 1
+        from trackmate_backend.db import MIGRATIONS
+        assert c.app.state.db.schema_version == len(MIGRATIONS)
 
 
 def test_forgot_and_reset_password(make, caplog):

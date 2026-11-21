@@ -80,6 +80,32 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 
 Follow-ups found: block `SYSTEM_ALERT_WINDOW` in release builds (present in generated main manifest); TrackMate on Phone 2 not installed yet.
 
+## Relay networking + responder dashboard (2026-11-21)
+
+| Test | Level | Result | Evidence |
+|---|---|---|---|
+| Relay receives SOS, stores before replying, dedupes | Unit (parser) + Physical (Phone 1 relay, simulated sender, USB) | PASS | Earlier single-phone check; again today: `201 RELAYED` then gateway path `SIM_SENDER→MOBILE_01→GATEWAY_01` |
+| Relay shows a confirmed LAN address | Built | NOT TESTED on Wi-Fi | Detects the interface used to reach the next hop; over USB it correctly shows "not confirmed" (`192.0.0.2`) |
+| Gateway → backend with gateway token | Unit + Integration + Physical | PASS | `upstream.sync_ok: true`; bad token keeps message queued (test) |
+| Rejected message does not block queue | Unit | PASS | New test |
+| **Real SOS from Phone 1 app → gateway → backend → dashboard** | **Physical** (USB, no relay phone) | **PASS** | Gateway 14:02:39.295 → backend 14:02:39.450, path `MOBILE_01→GATEWAY_01→BACKEND_01`; dashboard Command Center + detail |
+| **Dashboard acknowledge → Phone 1** | **Physical** | **PASS** | Ack 19:33:28 (local) → Phone 1 DB `ACKNOWLEDGED/Dev Responder/14:03:31Z`; phone screen "A responder has acknowledged your request" |
+| Duplicate retry → one incident | Integration (real services) | PASS | 2 retries → `duplicate:true`; backend 1 incident, events `RECEIVED, ACKNOWLEDGED` |
+| Backend offline → gateway holds → delivers on return | Integration with **physical phone relay** | PASS | `pending:1, reachable:false` → after restart backend has `SIM_SENDER→MOBILE_01→GATEWAY_01→BACKEND_01`, created_at preserved, null GPS kept |
+| Gateway offline → relay holds | Physical (earlier today) | PASS | Single-phone relay check |
+| Null GPS | Unit + Integration | PASS | Stored null, dashboard says "No location is shown rather than a guess" |
+| Acknowledge / dispatch (team required) / resolve (note required), never backwards | Unit | PASS | `backend/tests/test_incidents.py` |
+| Acknowledge from dashboard UI | Physical (browser) | PASS | |
+| Dispatch / resolve from dashboard UI | Built | NOT TESTED in browser | API tested |
+| Unauthorized admin actions fail | Unit + Integration | PASS | 401 without session, 403 for normal users (API and dashboard login) |
+| WebSocket live updates + polling fallback | Unit (ticket, push) + Browser | PASS | Dashboard showed "Live updates connected" |
+| **Phone 1 → Phone 2 → gateway (two phones, Wi-Fi)** | Physical | **NOT TESTED** | Phone 2 not connected; Mac on college network |
+| Relay offline (sender holds) | Physical | NOT TESTED in this run | Sender outbox logic tested earlier with "simulate no signal" |
+| App restart during delivery | — | NOT TESTED | |
+| Location accuracy / location timestamp in SOS | — | **Not in contract** | Needs contract change (approval) |
+| Relay/gateway request authentication | — | **Not implemented** | Any LAN device can post to relay/gateway |
+| Background relay (screen off / app backgrounded) | — | Not implemented | Foreground + keep-awake only |
+
 ## Brand & accounts — Increment 1 (2026-11-21, Phone 1 over USB)
 
 | Item | Result | Evidence |

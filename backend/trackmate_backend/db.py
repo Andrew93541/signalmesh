@@ -65,6 +65,62 @@ MIGRATIONS = [
     );
     CREATE INDEX ix_login_attempts ON login_attempts(identifier, at);
     """,
+    # 2: responder roles, gateways, incidents (from the SignalMesh gateway), incident events, audit log
+    """
+    ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user';
+    CREATE TABLE gateways (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_seen TEXT,
+        status_json TEXT
+    );
+    CREATE TABLE incidents (
+        message_id TEXT PRIMARY KEY,
+        gateway_id TEXT NOT NULL REFERENCES gateways(id),
+        device_id TEXT NOT NULL,
+        worker_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        description TEXT,
+        latitude REAL,
+        longitude REAL,
+        created_at TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        hops TEXT NOT NULL,
+        hop_count INTEGER NOT NULL,
+        incident_state TEXT NOT NULL,
+        acknowledged_by TEXT,
+        acknowledged_at TEXT,
+        dispatched_by TEXT,
+        dispatched_at TEXT,
+        dispatch_team TEXT,
+        dispatch_note TEXT,
+        resolved_by TEXT,
+        resolved_at TEXT,
+        resolution_note TEXT
+    );
+    CREATE INDEX ix_incidents_received ON incidents(received_at);
+    CREATE TABLE incident_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id TEXT NOT NULL REFERENCES incidents(message_id),
+        kind TEXT NOT NULL,
+        actor TEXT,
+        detail TEXT,
+        at TEXT NOT NULL
+    );
+    CREATE INDEX ix_incident_events_msg ON incident_events(message_id);
+    CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor_id TEXT,
+        actor_name TEXT,
+        action TEXT NOT NULL,
+        target TEXT,
+        detail TEXT,
+        ip TEXT,
+        at TEXT NOT NULL
+    );
+    """,
 ]
 
 

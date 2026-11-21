@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from signalmesh_gateway.config import Settings
-from signalmesh_gateway.main import create_app, forward_upstream_once
+from signalmesh_gateway.main import create_app, forward_upstream_once, sync_once
 from signalmesh_gateway.store import iso, utcnow
 
 
@@ -179,7 +179,7 @@ def test_upstream_queue_keeps_messages_until_upstream_returns(db_path):
     app = create_app(settings)
     store = app.state.store
 
-    def down(url, payload):
+    def down(url, payload, token=None):
         raise urllib.error.URLError("connection refused")
 
     with TestClient(app) as c:
@@ -191,7 +191,80 @@ def test_upstream_queue_keeps_messages_until_upstream_returns(db_path):
         assert c.get("/gateway/status").json()["upstream"]["pending"] == 2
 
         received = []
-        assert asyncio.run(forward_upstream_once(store, settings, post=lambda url, p: received.append(p) or 201)) == 2
+        assert asyncio.run(forward_upstream_once(store, settings, post=lambda url, p, token=None: received.append(p) or (201, None))) == 2
         assert [p["message_id"] for p in received] == ["SM-up-000002", "SM-up-000001"]  # HIGH first
         assert received[0]["hops"][-1] == "GATEWAY_01" and received[0]["hop_count"] == 2
         assert store.pending_upstream() == []
+
+
+def test_upstream_sends_token_and_rejected_message_does_not_block_queue(db_path):
+    settings = Settings(db_path=db_path, upstream_url="http://backend", upstream_token="gw-secret", upstream_retry_seconds=3600, sync_seconds=3600)
+    app = create_app(settings)
+    store = app.state.store
+    seen = []
+
+    def post(url, payload, token=None):
+        seen.append((payload["message_id"], token))
+        if payload["message_id"] == "SM-bad-000001":
+            raise urllib.error.HTTPError(url, 422, "Unprocessable", None, None)
+        return 201, None
+
+    with TestClient(app) as c:
+        c.post("/gateway/sos", json=sos("SM-bad-000001", priority="HIGH"))
+        c.post("/gateway/sos", json=sos("SM-good-00001", priority="LOW"))
+        assert asyncio.run(forward_upstream_once(store, settings, post=post)) == 1
+        assert seen == [("SM-bad-000001", "gw-secret"), ("SM-good-00001", "gw-secret")]
+        assert store.pending_upstream() == []
+        s = c.get("/gateway/status").json()["upstream"]
+        assert s["pending"] == 0 and s["rejected"] == 1
+
+
+def test_upstream_auth_failure_keeps_message_queued(db_path):
+    settings = Settings(db_path=db_path, upstream_url="http://backend", upstream_token="wrong", upstream_retry_seconds=3600, sync_seconds=3600)
+    app = create_app(settings)
+    with TestClient(app) as c:
+        c.post("/gateway/sos", json=sos())
+
+        def unauthorized(url, payload, token=None):
+            raise urllib.error.HTTPError(url, 401, "Unauthorized", None, None)
+
+        assert asyncio.run(forward_upstream_once(app.state.store, settings, post=unauthorized)) == 0
+        assert len(app.state.store.pending_upstream()) == 1  # kept for retry once the token is fixed
+
+
+def test_sync_applies_responder_actions_and_pushes_status(db_path):
+    settings = Settings(db_path=db_path, upstream_url="http://backend", upstream_token="gw-secret", upstream_retry_seconds=3600, sync_seconds=3600)
+    app = create_app(settings)
+    store = app.state.store
+    pushed, published = [], []
+
+    async def publish(kind, data):
+        published.append((kind, data["status"]))
+
+    updates = {"updates": [
+        {"message_id": "SM-sync-00001", "incident_state": "DISPATCHED", "acknowledged_by": "Meera", "resolved_by": None},
+        {"message_id": "SM-sync-00002", "incident_state": "RESOLVED", "acknowledged_by": "Meera", "resolved_by": "Arjun", "resolution_note": "Safe"},
+        {"message_id": "SM-unknown-01", "incident_state": "ACKNOWLEDGED", "acknowledged_by": "Meera"},
+    ], "cursor": 42}
+
+    with TestClient(app) as c:
+        c.post("/gateway/sos", json=sos("SM-sync-00001"))
+        c.post("/gateway/sos", json=sos("SM-sync-00002"))
+        c.post("/gateway/nodes/heartbeat", json={"node_id": "RELAY_02", "role": "relay", "queue_size": 1})
+        state = {"cursor": 0}
+        n = asyncio.run(sync_once(store, settings, state, publish,
+                                  get=lambda url, token=None: (200, updates) if "since=0" in url and token == "gw-secret" else (_ for _ in ()).throw(AssertionError(url)),
+                                  post=lambda url, payload, token=None: pushed.append((url, payload, token)) or (200, None)))
+        assert n == 2 and state["cursor"] == 42
+        # Phones see the result through the unchanged ack-status endpoint
+        a1 = c.get("/gateway/ack-status/SM-sync-00001").json()
+        assert a1["status"] == "ACKNOWLEDGED" and a1["acknowledged_by"] == "Meera"
+        assert c.get("/gateway/ack-status/SM-sync-00002").json()["status"] == "RESOLVED"
+        assert published == [("sos.updated", "ACKNOWLEDGED"), ("sos.updated", "RESOLVED")]
+        url, payload, token = pushed[0]
+        assert url.endswith("/v1/gateway-sync/status") and token == "gw-secret"
+        assert payload["node_id"] == "GATEWAY_01" and payload["nodes"][0]["node_id"] == "RELAY_02"
+        # applying the same updates again changes nothing (idempotent)
+        assert asyncio.run(sync_once(store, settings, {"cursor": 0}, publish,
+                                     get=lambda url, token=None: (200, updates),
+                                     post=lambda url, payload, token=None: (200, None))) == 0

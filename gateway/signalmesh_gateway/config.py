@@ -9,6 +9,10 @@ class Settings:
     # Optional server further up the chain (e.g. a cloud backend). When set, every
     # stored SOS is forwarded there with retries; when empty this gateway is the end.
     upstream_url: str | None = None
+    # Gateway credential for the TrackMate backend (Authorization: Bearer <token>).
+    upstream_token: str | None = None
+    # How often to pull responder actions from, and push gateway status to, the backend.
+    sync_seconds: float = 5.0
     node_online_seconds: int = 30
     upstream_retry_seconds: float = 5.0
     overdue_check_seconds: float = 15.0
@@ -21,6 +25,8 @@ def load_settings() -> Settings:
         node_id=env("SIGNALMESH_NODE_ID", "GATEWAY_01"),
         db_path=env("SIGNALMESH_DB_PATH", "data/gateway.db"),
         upstream_url=(env("SIGNALMESH_UPSTREAM_URL") or "").strip().rstrip("/") or None,
+        upstream_token=(env("SIGNALMESH_UPSTREAM_TOKEN") or "").strip() or None,
+        sync_seconds=float(env("SIGNALMESH_SYNC_SECONDS", "5")),
         node_online_seconds=int(env("SIGNALMESH_NODE_ONLINE_SECONDS", "30")),
         upstream_retry_seconds=float(env("SIGNALMESH_UPSTREAM_RETRY_SECONDS", "5")),
         overdue_check_seconds=float(env("SIGNALMESH_OVERDUE_CHECK_SECONDS", "15")),

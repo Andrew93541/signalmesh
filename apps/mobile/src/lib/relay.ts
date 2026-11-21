@@ -79,6 +79,8 @@ const pendingCheckins = () =>
 export interface RelayState {
   running: boolean;
   address: string | null;
+  /** route = confirmed via a connection to the next hop; device = unconfirmed fallback */
+  addressSource: 'route' | 'device' | null;
   port: number;
   error: string | null;
   items: RelayItem[];
@@ -88,6 +90,7 @@ export interface RelayState {
 export const relayStore = createStore<RelayState>({
   running: false,
   address: null,
+  addressSource: null,
   port: getSettings().relayPort,
   error: null,
   items: loadItems(),
@@ -277,6 +280,34 @@ export async function forwardOnce() {
 
 let server: any = null;
 let loop: ReturnType<typeof setInterval> | null = null;
+let addressTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The address other phones should use. expo-network returns a single device IP,
+ * which can be the mobile-data interface (seen on device: 192.0.0.2). Instead,
+ * open a TCP connection to the next hop and read the local address Android chose
+ * for it: that is the interface on the shared Wi-Fi/hotspot network.
+ */
+async function refreshAddress(TcpSocket: any) {
+  const m = getSettings().gatewayUrl.match(/^https?:\/\/(\[[^\]]+\]|[^/:]+)(?::(\d+))?/i);
+  const host = m?.[1];
+  const port = m?.[2] ? Number(m[2]) : 80;
+  let viaRoute: string | null = null;
+  if (host && host !== '127.0.0.1' && host !== 'localhost') {
+    viaRoute = await new Promise<string | null>((resolve) => {
+      let done = false;
+      const finish = (v: string | null) => { if (!done) { done = true; try { sock.destroy(); } catch {} resolve(v); } };
+      const sock = TcpSocket.createConnection({ host, port }, () => finish(sock.localAddress ?? null));
+      sock.on('error', () => finish(null));
+      setTimeout(() => finish(null), 3000);
+    });
+  }
+  if (viaRoute && !viaRoute.startsWith('127.')) {
+    patch({ address: viaRoute.replace(/^::ffff:/, ''), addressSource: 'route' });
+  } else {
+    patch({ address: await Network.getIpAddressAsync().catch(() => null), addressSource: 'device' });
+  }
+}
 
 export async function startRelay() {
   if (server) return;
@@ -301,10 +332,11 @@ export async function startRelay() {
     server = null;
   });
   server.listen({ port, host: '0.0.0.0', reuseAddress: true }, async () => {
-    const address = await Network.getIpAddressAsync().catch(() => null);
-    console.log(`[relay] listening on ${address}:${port}`);
-    patch({ running: true, address, port, error: null });
+    patch({ running: true, port, error: null });
+    await refreshAddress(TcpSocket);
+    console.log(`[relay] listening on 0.0.0.0:${port}, reachable at ${relayStore.get().address} (${relayStore.get().addressSource})`);
   });
+  addressTimer = setInterval(() => void refreshAddress(TcpSocket), 30_000); // Wi-Fi/hotspot can change
   loop = setInterval(() => void forwardOnce(), 3000);
   void activateKeepAwakeAsync('relay'); // a sleeping phone stops relaying
 }
@@ -314,8 +346,10 @@ export function stopRelay() {
   server = null;
   if (loop) clearInterval(loop);
   loop = null;
+  if (addressTimer) clearInterval(addressTimer);
+  addressTimer = null;
   deactivateKeepAwake('relay');
-  patch({ running: false, address: null });
+  patch({ running: false, address: null, addressSource: null });
 }
 
 /** Demo reset. */

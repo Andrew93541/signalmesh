@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* TrackMate brand tokens (same values and contrast notes as the mobile app,
+   apps/mobile/src/ui/theme.ts). Leaf green and orange are accents only. */
+@theme {
+  --color-bg: #fffdf5;
+  --color-surface: #f2f6ef;
+  --color-surface2: #e6ede2;
+  --color-line: #dce5d8;
+  --color-line-strong: #7a8b7f;
+  --color-ink: #19382c;
+  --color-muted: #5e6e63;
+  --color-forest: #075c3b;
+  --color-forest-dark: #06452f;
+  --color-forest-soft: #e3efe6;
+  --color-leaf: #68b52e;
+  --color-sunrise: #f47b0b;
+  --color-sunrise-text: #b25300;
+  --color-sunrise-soft: #fff1e3;
+  --color-sos: #d92d36;
+  --color-sos-text: #b42318;
+  --color-sos-soft: #fdecea;
+  --color-ok: #1a7346;
+  --color-ok-soft: #e7f5ee;
+  --color-warn: #8a4b00;
+  --color-warn-soft: #fff3dc;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-forest);
+  outline-offset: 2px;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+}

@@ -40,12 +40,27 @@ class Hub:
                 self.clients.discard(ws)
 
 
-def post_json(url: str, payload: dict, timeout: float = 4.0) -> int:
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST"
-    )
+def _request(method: str, url: str, token: str | None, payload: dict | None = None, timeout: float = 4.0):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as res:
-        return res.status
+        body = res.read()
+        return res.status, (json.loads(body) if body else None)
+
+
+def post_json(url: str, payload: dict, token: str | None = None, timeout: float = 4.0):
+    return _request("POST", url, token, payload, timeout)
+
+
+def get_json(url: str, token: str | None = None, timeout: float = 4.0):
+    return _request("GET", url, token, None, timeout)
+
+
+# Upstream answers that will never succeed by retrying the same payload.
+_PERMANENT = {400, 404, 409, 413, 422}
 
 
 async def forward_upstream_once(store: Store, settings: Settings, post: Callable = post_json) -> int:
@@ -58,7 +73,16 @@ async def forward_upstream_once(store: Store, settings: Settings, post: Callable
         payload["hop_count"] = msg["hop_count"] + 1  # this gateway acts as one more hop
         payload["status"] = "RELAYED"
         try:
-            await asyncio.to_thread(post, f"{settings.upstream_url}/gateway/sos", payload)
+            await asyncio.to_thread(post, f"{settings.upstream_url}/gateway/sos", payload, settings.upstream_token)
+        except urllib.error.HTTPError as e:
+            if e.code in _PERMANENT:
+                # A message the backend refuses must not block everything behind it.
+                store.mark_upstream_rejected(msg["message_id"], f"HTTP {e.code}")
+                log.error("upstream rejected %s (HTTP %s); set aside, queue continues", msg["message_id"], e.code)
+                continue
+            store.mark_upstream(msg["message_id"], ok=False, error=f"HTTP {e.code}")
+            log.warning("upstream refused %s (HTTP %s), stays queued", msg["message_id"], e.code)
+            break  # e.g. 401 bad token or 5xx: retry later, keep order
         except (urllib.error.URLError, OSError, TimeoutError) as e:
             store.mark_upstream(msg["message_id"], ok=False, error=str(e))
             log.warning("upstream unreachable, %s stays queued: %s", msg["message_id"], e)
@@ -67,6 +91,50 @@ async def forward_upstream_once(store: Store, settings: Settings, post: Callable
         sent += 1
         log.info("forwarded %s upstream", msg["message_id"])
     return sent
+
+
+async def sync_once(store: Store, settings: Settings, state: dict, publish: Callable,
+                    get: Callable = get_json, post: Callable = post_json) -> int:
+    """Pull responder actions from the backend and push this gateway's status.
+
+    Responder actions are applied with the existing ack/resolve logic, so phones
+    see them through the unchanged GET /gateway/ack-status. DISPATCHED is shown
+    to v1 clients as ACKNOWLEDGED (CONTRACT.md § v2 derivation table).
+    Returns the number of incidents updated locally.
+    """
+    base, token = settings.upstream_url, settings.upstream_token
+    _, body = await asyncio.to_thread(get, f"{base}/v1/gateway-sync/updates?since={state.get('cursor', 0)}", token)
+    changed = 0
+    for u in body.get("updates", []):
+        mid, inc = u["message_id"], u["incident_state"]
+        if inc in ("ACKNOWLEDGED", "DISPATCHED") and u.get("acknowledged_by"):
+            msg, did = store.acknowledge(mid, u["acknowledged_by"])
+        elif inc == "RESOLVED" and u.get("resolved_by"):
+            msg, did = store.resolve(mid, u["resolved_by"], u.get("resolution_note"))
+        else:
+            continue
+        if did and msg:
+            changed += 1
+            log.info("responder update from backend: %s -> %s", mid, msg["status"])
+            await publish("sos.updated", msg)
+    state["cursor"] = body.get("cursor", state.get("cursor", 0))
+
+    counts = store.counts()
+    await asyncio.to_thread(post, f"{base}/v1/gateway-sync/status", {
+        "node_id": settings.node_id,
+        "database": "ok" if store.ping() else "error",
+        "messages": {k: counts[k] for k in ("total", "open", "awaiting_ack", "acknowledged", "resolved")},
+        "upstream_pending": counts["upstream_pending"],
+        "nodes": [
+            {k: n[k] for k in ("node_id", "role", "label", "queue_size", "address", "last_seen", "online")}
+            for n in store.nodes(settings.node_online_seconds)
+        ],
+        "checkins": [
+            {k: c[k] for k in ("device_id", "worker_name", "checked_in_at", "due_at", "overdue")}
+            for c in store.latest_checkins()
+        ],
+    }, token)
+    return changed
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -85,6 +153,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except Exception:
                 log.exception("upstream loop error")
             await asyncio.sleep(settings.upstream_retry_seconds)
+
+    sync_state: dict = {"cursor": 0, "ok": None, "error": None}
+
+    async def sync_loop():
+        while True:
+            try:
+                await sync_once(store, settings, sync_state, hub.publish)
+                sync_state.update(ok=True, error=None)
+            except Exception as e:
+                if sync_state.get("ok") is not False:
+                    log.warning("backend sync failed: %s", e)
+                sync_state.update(ok=False, error=str(e))
+            await asyncio.sleep(settings.sync_seconds)
 
     async def overdue_loop():
         alerted: set[tuple[str, str]] = set()  # (device_id, due_at) already announced
@@ -106,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tasks = [asyncio.create_task(overdue_loop())]
         if settings.upstream_url:
             tasks.append(asyncio.create_task(upstream_loop()))
+            tasks.append(asyncio.create_task(sync_loop()))
         yield
         for t in tasks:
             t.cancel()
@@ -141,6 +223,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "url": settings.upstream_url,
                 "reachable": state["upstream_reachable"],
                 "pending": counts["upstream_pending"],
+                "rejected": counts["upstream_rejected"],
+                "sync_ok": sync_state["ok"],
             },
             "time": iso(utcnow()),
         }
