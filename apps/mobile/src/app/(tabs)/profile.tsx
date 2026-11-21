@@ -34,6 +34,7 @@ export default function Profile() {
 
       <Section title="Safety">
         <Card>
+          <Row icon="contacts" title="Trusted contacts" subtitle="People to text after an SOS" onPress={() => router.push('/contacts')} />
           <Row icon="history" title="SOS history" subtitle="Every SOS sent from this phone" onPress={() => router.push('/sos-history')} />
           <Row icon="cell_tower" title="Help others" subtitle="Pass nearby people's SOS messages on" onPress={() => router.push('/relay')} />
           <Row icon="settings" title="Connection settings" subtitle="Name, device ID, safety station address" onPress={() => router.push('/connection')} />

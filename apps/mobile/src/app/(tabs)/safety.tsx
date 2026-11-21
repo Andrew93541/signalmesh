@@ -13,6 +13,7 @@ import { createSos, outboxStore } from '@/lib/outbox';
 import { settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
 import { linkStore, syncNow } from '@/lib/sync';
+import { contactsStore } from '@/trackmate/contacts';
 import { describeStatus, isOpen } from '@/trackmate/sosStatus';
 import { Banner, Button, Card, Chip, Row, Screen, Section, Txt, s } from '@/ui/kit';
 import { SosButton } from '@/ui/SosButton';
@@ -34,6 +35,7 @@ export default function Safety() {
   const checkin = useStore(checkinStore);
   const alarmOn = useStore(alarmStore);
   const link = useStore(linkStore);
+  const contacts = useStore(contactsStore);
   const now = useNow(10_000);
 
   const [category, setCategory] = useState<Category>('MEDICAL');
@@ -140,6 +142,9 @@ export default function Safety() {
             onPress={() => setAlarm(!alarmOn)} danger={alarmOn} />
           <Row icon="call" title="Call 112" subtitle="India's emergency number. Opens your phone dialer."
             onPress={() => void Linking.openURL('tel:112')} />
+          <Row icon="contacts" title="Trusted contacts"
+            subtitle={contacts.length === 0 ? 'None yet. Add someone to text after an SOS.' : `${contacts.length} ${contacts.length === 1 ? 'person' : 'people'}`}
+            onPress={() => router.push('/contacts')} />
           <Row icon="history" title="SOS history" onPress={() => router.push('/sos-history')} />
         </Card>
       </Section>

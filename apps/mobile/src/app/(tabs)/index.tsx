@@ -7,6 +7,7 @@ import { outboxStore } from '@/lib/outbox';
 import { settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
 import { linkStore, type LinkState } from '@/lib/sync';
+import { contactsStore } from '@/trackmate/contacts';
 import { formatDate, journeysStore, todayLocal, type Journey } from '@/trackmate/journeys';
 import { MODE_LABEL, prefsStore } from '@/trackmate/prefs';
 import { Button, Card, Icon, Row, Screen, Section, Txt } from '@/ui/kit';
@@ -46,6 +47,7 @@ export default function Home() {
   const checkin = useStore(checkinStore);
   const outbox = useStore(outboxStore);
   const journeys = useStore(journeysStore);
+  const contacts = useStore(contactsStore);
   const now = useNow(30_000);
 
   const trekker = mode === 'TREKKER';
@@ -128,6 +130,12 @@ export default function Home() {
             title="Check-in timer"
             subtitle={due === null ? 'Not started' : due >= 0 ? `Next check-in due in ${minutes(due)}` : `Overdue by ${minutes(due)}`}
             onPress={() => router.navigate('/safety')}
+          />
+          <Row
+            icon="contacts"
+            title="Trusted contacts"
+            subtitle={contacts.length === 0 ? 'None yet. Add someone you can text after an SOS.' : `${contacts.length} ${contacts.length === 1 ? 'person' : 'people'}`}
+            onPress={() => router.push('/contacts')}
           />
           {waiting > 0 ? (
             <Row icon="schedule" title={`${waiting} message${waiting > 1 ? 's' : ''} waiting`} subtitle="Saved on your phone. We'll keep trying to send." onPress={() => router.push('/sos-history')} />

@@ -5,6 +5,8 @@ import { alarmStore, setAlarm } from '@/lib/alarm';
 import { outboxStore } from '@/lib/outbox';
 import { useStore } from '@/lib/store';
 import { linkStore } from '@/lib/sync';
+import { contactsStore } from '@/trackmate/contacts';
+import { smsUri, sosSmsText } from '@/trackmate/smsText';
 import { describeStatus, statusSteps } from '@/trackmate/sosStatus';
 import { Banner, Button, Card, EmptyState, Icon, Screen, Section, Txt } from '@/ui/kit';
 import { color, space } from '@/ui/theme';
@@ -20,6 +22,7 @@ export default function SosStatus() {
   const item = useStore(outboxStore).find((i) => i.message.message_id === id);
   const alarmOn = useStore(alarmStore);
   const link = useStore(linkStore);
+  const contacts = useStore(contactsStore);
 
   if (!item) {
     return (
@@ -82,6 +85,26 @@ export default function SosStatus() {
           </Txt>
           <Txt v="caption" c={color.text3}>Reference {m.message_id.slice(0, 12)}… · {item.attempts} send attempt{item.attempts === 1 ? '' : 's'}</Txt>
         </Card>
+      </Section>
+
+      <Section title="Tell people you trust">
+        {contacts.length > 0 ? (
+          <>
+            <Button
+              label={`Text ${contacts.length === 1 ? contacts[0].name : `${contacts.length} trusted contacts`}`}
+              icon="sms"
+              onPress={() => void Linking.openURL(smsUri(contacts.map((c) => c.phone), sosSmsText({
+                workerName: m.worker_name, category: m.category, priority: m.priority,
+                latitude: m.latitude, longitude: m.longitude, createdAt: m.created_at,
+              }, time)))}
+            />
+            <Txt v="footnote" c={color.text2}>
+              Opens your messaging app with your location filled in. You choose whether to send. Uses normal SMS, so it can work without internet.
+            </Txt>
+          </>
+        ) : (
+          <Button label="Add trusted contacts" kind="secondary" icon="contacts" onPress={() => router.push('/contacts')} />
+        )}
       </Section>
 
       <Button label={alarmOn ? 'Stop alarm' : 'Sound local alarm'} kind={alarmOn ? 'destructive' : 'secondary'} icon="alarm" onPress={() => setAlarm(!alarmOn)} />

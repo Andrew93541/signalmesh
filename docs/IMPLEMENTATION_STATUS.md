@@ -71,6 +71,10 @@ Test levels: **Unit** · **Integration** (in-process / local services) ·
 | TalkBack activate-to-send on SOS button | Built; NOT TESTED | |
 | **Inc 4** SOS history, Help others (relay), Connection settings redesigned (UI only, same calls) | PASS (Physical) | Screenshots on Phone 1; "Test connection" returned "The safety station answered…" |
 | v2 review R1 confirmed on device | Known gap | Gateway shows the test SOS RESOLVED, phone still shows Acknowledged: polling stops at ACKNOWLEDGED. Fix scheduled with contract v2 (Phase 3) |
+| **Inc 5** Trusted contacts (add, list, remove; stored on phone only) | PASS (Physical) | Added "Test Contact" +910000000000 on Phone 1; validation unit-tested (`scripts/test-sms-text.mts`) |
+| Text trusted contacts from an SOS (prefilled SMS, user sends) | PASS (Physical) | Android chooser → Google Messages opened with recipient and prefilled text incl. map link and time. **Not sent**; left as a draft |
+| SOS text with no GPS | Unit only | Says "no location", never invents one |
+| Automatic SMS sending | Not built by design | Would need SMS permission (restricted by Play policy); the user sends |
 | Emergency description field | Not built (needs an additive `description` param on `createSos`; deferred to avoid touching queue logic) | |
 | Connection settings save bug | Fixed: field now also saves on blur/Enter | Found on device |
 
