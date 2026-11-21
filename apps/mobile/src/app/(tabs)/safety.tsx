@@ -54,7 +54,7 @@ export default function SosScreen() {
   }
 
   return (
-    <Screen>
+    <Screen tab>
       <View>
         <T size={24} bold>{settings.workerName}</T>
         <T muted mono size={12}>{settings.deviceId}</T>
@@ -96,7 +96,7 @@ export default function SosScreen() {
       </View>
 
       {latest ? (
-        <Link href="/status" asChild>
+        <Link href="/sos-history" asChild>
           <Pressable accessibilityRole="link">
             <Card>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -121,7 +121,7 @@ export default function SosScreen() {
           <T size={20} bold color={C.sos}>Overdue by {formatCountdown(dueIn)}: control room alerted</T>
         )}
         {checkin.pending ? <T muted size={12}>Check-in stored, waiting for a route</T> : null}
-        <Button label="I'm OK, check in" color={C.ok} textColor="#062417" onPress={onCheckIn} />
+        <Button label="I'm OK, check in" color={C.ok} textColor="#FFFFFF" onPress={onCheckIn} />
       </Card>
 
       <Button

@@ -1,11 +1,14 @@
 {
   "name": "signalmesh",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=web",
-    "dev:mobile": "turbo run dev --filter=mobile",
+    "dev:mobile": "turbo run dev --filter=trackmate-mobile",
     "build": "turbo run build",
     "lint": "turbo run lint"
   },

@@ -19,7 +19,12 @@ function Field({ label, value, onSave, numeric, hint }: {
         style={s.input}
         value={draft}
         onChangeText={setDraft}
+        // Save on every way editing can end: some Android keyboards close on Back
+        // without firing onEndEditing, which left the old value in use.
         onEndEditing={() => onSave(draft.trim())}
+        onBlur={() => onSave(draft.trim())}
+        onSubmitEditing={() => onSave(draft.trim())}
+        returnKeyType="done"
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType={numeric ? 'number-pad' : 'default'}

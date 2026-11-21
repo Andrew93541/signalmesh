@@ -9,23 +9,26 @@ import type { LocalStatus } from '@/lib/outbox';
 import { useStore } from '@/lib/store';
 import { linkStore } from '@/lib/sync';
 
+// Light TrackMate tokens (src/ui/theme.ts) mapped onto the original placeholder names,
+// so the existing SignalMesh screens keep working unchanged while they are redesigned.
 export const C = {
-  bg: '#0B0E13',
-  card: '#12161D',
-  border: '#252B36',
-  text: '#E8ECF2',
-  muted: '#8B95A5',
-  sos: '#E5483D',
-  ok: '#3DDC97',
-  warn: '#F5A524',
+  bg: '#F6F7F9',
+  card: '#FFFFFF',
+  border: '#E2E6EC',
+  text: '#0F1B2D',
+  muted: '#475467',
+  sos: '#C8261B',
+  ok: '#1A7346',
+  warn: '#8A4B00',
 };
 
-export function Screen({ children }: { children: ReactNode }) {
+/** `tab`: screen is a tab (no header) and needs the top safe-area inset. */
+export function Screen({ children, tab }: { children: ReactNode; tab?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: C.bg }}
-      contentContainerStyle={{ padding: 20, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100, gap: 16 }}>
+      contentContainerStyle={{ padding: 20, paddingTop: (tab ? insets.top : 0) + 16, paddingBottom: insets.bottom + 100, gap: 16 }}>
       {children}
     </ScrollView>
   );
@@ -101,7 +104,7 @@ const STATUS_COLOR: Record<LocalStatus, string> = {
   QUEUED: C.warn,
   CREATED: C.muted,
   RELAYED: C.warn,
-  DELIVERED: '#7FB5FF',
+  DELIVERED: '#1D5FD1',
   ACKNOWLEDGED: C.ok,
   RESOLVED: C.muted,
 };
