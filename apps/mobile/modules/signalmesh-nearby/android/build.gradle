@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.trackmate'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.signalmeshnearby"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // Google Nearby Connections: phone-to-phone over Bluetooth / BLE / Wi-Fi Direct,
+  // no shared network or internet needed.
+  implementation 'com.google.android.gms:play-services-nearby:19.3.0'
+  // Android Health Connect (Analytics): read-only steps, distance, calories, exercise sessions.
+  implementation 'androidx.health.connect:connect-client:1.1.0'
+}

@@ -1,0 +1,11 @@
+{
+  "platforms": [
+    "android"
+  ],
+  "android": {
+    "modules": [
+      "expo.modules.signalmeshnearby.SignalMeshNearbyModule",
+      "expo.modules.signalmeshnearby.HealthModule"
+    ]
+  }
+}
