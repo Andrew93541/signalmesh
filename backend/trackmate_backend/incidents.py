@@ -26,6 +26,14 @@ RESPONDER_ROLES = {"responder", "admin"}
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
+class PeerAckIn(BaseModel):
+    message_id: str = Field(pattern=r"^SM-[A-Za-z0-9-]{6,64}$")
+    recipient_device_id: str = Field(min_length=1, max_length=64)
+    recipient_name: str | None = Field(default=None, max_length=80)
+    recipient_user_id: str | None = Field(default=None, max_length=64)
+    acknowledged_at: str = Field(min_length=10, max_length=40)
+
+
 class IncomingSos(BaseModel):
     """What a gateway forwards (same shape as the SignalMesh contract)."""
     model_config = ConfigDict(extra="ignore")
@@ -191,6 +199,28 @@ def register(app: FastAPI, db: Database, settings, current_user) -> Hub:
         log.info("incident %s %s/%s via %s", sos.message_id, sos.category, sos.priority, " -> ".join(path))
         await hub.publish("incident.created", inc)
         return {"message_id": sos.message_id, "duplicate": False, "incident_state": "OPEN", "node_id": settings.node_id}
+
+    @app.post("/gateway/peer-ack", status_code=201)
+    async def receive_peer_ack(body: PeerAckIn, response: Response, gateway_id: str = Depends(current_gateway)):
+        """A nearby TrackMate user acknowledged seeing this SOS on their phone.
+
+        Recorded as an incident event only. It does NOT change incident_state: a responder
+        acknowledgement (dashboard) and a nearby person's acknowledgement are different things.
+        """
+        with db.lock:
+            if not db.one("SELECT 1 FROM incidents WHERE message_id = ?", body.message_id):
+                raise HTTPException(404, "Incident not known yet")  # the gateway retries later
+            for e in db.all("SELECT detail FROM incident_events WHERE message_id = ? AND kind = 'PEER_ACK'", body.message_id):
+                if json.loads(e["detail"] or "{}").get("recipient_device_id") == body.recipient_device_id:
+                    response.status_code = 200
+                    return {"message_id": body.message_id, "duplicate": True}
+            user_id = body.recipient_user_id if body.recipient_user_id and db.one("SELECT 1 FROM users WHERE id = ?", body.recipient_user_id) else None
+            event(body.message_id, "PEER_ACK", body.recipient_name or body.recipient_device_id,
+                  {"recipient_device_id": body.recipient_device_id, "recipient_user_id": user_id,
+                   "acknowledged_at": body.acknowledged_at, "via": gateway_id})
+        log.info("nearby acknowledgement for %s by device %s", body.message_id, body.recipient_device_id)
+        await hub.publish("incident.updated", get_incident(body.message_id))
+        return {"message_id": body.message_id, "duplicate": False}
 
     @app.get("/v1/gateway-sync/updates")
     def sync_updates(since: int = 0, gateway_id: str = Depends(current_gateway)):

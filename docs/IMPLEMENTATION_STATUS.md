@@ -182,3 +182,78 @@ Labels: **unit** = automated test, **integration** = real processes on the Mac, 
 | 4 Duplicate → one record | Unit + Integration PASS (gateway); not physically |
 | 5 No GPS accepted, not invented | Unit + Integration PASS (gateway); not physically |
 | 6 Responder ack reaches phone | Integration PASS (gateway ack-status); **not physically** |
+
+## FEEDS — Increment 1 (2026-11-22, not committed)
+
+| Feature | Result | Type / evidence |
+|---|---|---|
+| Bottom navigation Home · Explore · **Feeds** · Safety · Profile (newspaper icon) | Built; NOT TESTED on a phone | Journeys moved from a tab to a normal screen, opened from Home ("All journeys") and Profile ("Journeys"); `journey/new` and `journey/[id]` unchanged |
+| Backend migration 4: `event_categories`, `events`, `event_applications` (lifecycle and application statuses in separate tables; indexes on status+visibility+start, organizer, lat/lon, category) | PASS (unit) | schema_version 4 on the running backend |
+| `GET /v1/events` Discover: only PUBLISHED + PUBLIC + not finished; search, category, location, date range, difficulty, seats-available filters | PASS (unit + integration) | `tests/test_events.py`; read through the public tunnel |
+| Organizer contact never in public responses | PASS (unit) | |
+| `GET /v1/events/mine` (all statuses + private fields, own events only), `GET /v1/events/{id}` (unpublished = 404 for others), `GET /v1/event-categories`, cover endpoint | PASS (unit) | |
+| Available seats = limit − ACCEPTED applications (pending does not hold a seat) | PASS (unit) | |
+| Feeds screen: Discover / My Events / Applied, event cards, filters, empty and error states, pull to refresh | Built, type-checked; NOT TESTED on a phone | release 1.0.2 build 3 |
+| Event detail screen | Built; NOT TESTED on a phone | |
+| Applied tab | Placeholder (applications are Increment 4) | |
+| Creating events | NOT BUILT (Increment 2) | My Events says so |
+| Dev-only `manage.py create-test-event` | PASS | refuses without `TRACKMATE_DEV_MODE=1`; one `[TEST] Feeds screen check` event exists in the dev database |
+
+## Recipient SOS alerts (siren) — 2026-11-22, not committed
+
+Implemented = code written and built. Automated = unit/integration tests. Physical = two real phones.
+
+| Feature | Implemented | Automated | Physical |
+|---|---|---|---|
+| Original siren (synthesised by `apps/mobile/scripts/make-siren.py`, 2.4 s loop) | Yes | — | NOT TESTED |
+| Native alert on SOS receipt (mesh path in Kotlin, Wi-Fi relay path via JS), deduplicated by incident ID across restarts | Yes | — (native) | NOT TESTED |
+| High-importance channel "Nearby SOS alerts", persistent notification, Acknowledge / View location / Call sender actions | Yes | — | NOT TESTED |
+| Siren loops (alarm stream, in-app volume) + vibration until acknowledged / responder acted / 10 min | Yes | — | NOT TESTED |
+| No siren when notifications/channel are off or Do Not Disturb is on (honest warnings in Help others) | Yes | — | NOT TESTED |
+| Full-screen intent only when Android allows (`canUseFullScreenIntent`), else heads-up; lock screen shows "Emergency SOS nearby" only (private) | Yes | — | NOT TESTED |
+| Foreground service (connectedDevice) while the nearby mesh is on | Yes | — | NOT TESTED |
+| Pop-up screen: red SOS heading, name/initials, type, incident ID, received time, coordinates with Current / Last-known / None, distance | Yes | freshness rule: PASS (unit) | NOT TESTED |
+| Local acknowledgement saved (commit) before siren stops; LOCAL vs CONFIRMED shown | Yes | — | NOT TESTED |
+| Acknowledgement queued and delivered: mesh PEER_ACK frames toward the sender + gateway `POST /gateway/peer-ack` when a route exists | Yes | gateway: PASS (6 tests) | NOT TESTED |
+| Gateway → backend forwarding, retried until the backend has the SOS; recorded as `PEER_ACK` event, incident state unchanged | Yes | PASS (gateway + backend tests); PASS (live integration via the public tunnel) | — |
+| `ack-status` gains `seen_by` (additive); sender's SOS page shows "Seen by N nearby TrackMate users" (nearby vs server-confirmed) | Yes | gateway: PASS | NOT TESTED |
+| Dashboard history labels nearby acknowledgements as "not a responder" | Yes | tsc/eslint PASS | — |
+| CALL SENDER only when the sender opted in ("Let nearby TrackMate users call me", off by default); the gateway drops the number | Yes | live check: number not stored by gateway | NOT TESTED |
+| TRANSMITTED state | Not added (decision 4): RELAYED already covers it | — | — |
+| Alerts for faraway contacts (push) | Not built (decision 6) | — | — |
+
+## Final hackathon integration — 2026-11-22 (app 1.0.4 build 5, not committed)
+
+Columns: UI = screen built · Backend = connected to real APIs · Automated = tests · Physical = on a phone (none connected this session).
+
+| Area | UI | Backend | Automated | Physical |
+|---|---|---|---|---|
+| Bottom nav: Home · Feed · Analytics · Safety · Profile (Explore and Journeys kept as screens) | Yes | — | type check | NOT TESTED |
+| Feed: Discover / Following posts, paginated, pull to refresh | Yes | Yes | backend PASS | NOT TESTED |
+| Create post with photos/videos (streamed upload, type + size + signature checked), caption, location name, opt-in exact coordinates | Yes | Yes | backend PASS | NOT TESTED |
+| Like/unlike, comments (delete own; post owner can moderate), edit caption, delete post (files removed) | Yes | Yes | backend PASS | NOT TESTED |
+| Follow/unfollow, followers/following lists, open profiles from posts | Yes | Yes | backend PASS | NOT TESTED |
+| Report and block (block hides both ways, removes follows; Settings → Blocked users) | Yes | Yes | backend PASS | NOT TESTED |
+| Share post | Yes (system share sheet, text only; there are no public post links) | — | — | NOT TESTED |
+| Events inside Feed (Upcoming / My Events / Applied) | Yes (unchanged Increment 1) | Yes | backend PASS | NOT TESTED |
+| Event creation, admin approval, organizer applicant approval (Increments 2–5) | NOT BUILT | NOT BUILT | — | — |
+| Instagram-style profile: photo, name, username, bio, shown home location, interests, counts, grid, follow / edit | Yes | Yes | privacy test PASS (no email/phone/contacts/role) | NOT TESTED |
+| Analytics: Health Connect steps, distance, calories (labelled source; never estimated), active minutes (logged workouts), weekly chart, goal, date selector, recent activity | Yes | native Health Connect (read only, nothing sent to server) | helpers PASS | NOT TESTED |
+| Analytics: TrackMate GPS trek time and distance, labelled separately | Yes | local | helpers PASS | NOT TESTED |
+| Plan & pricing: Free; Premium per trip ₹199 bundle (3 group passes), ₹149 community, ₹149 active SOS | Yes | Yes | PASS (prices, no duplicates, never ACTIVE without payment) | NOT TESTED |
+| Payment | Not integrated (no provider configured); requests stay PENDING_PAYMENT / NOT_CONFIGURED | | | |
+| Settings (gear on Profile): account, safety, notifications, privacy, blocked users, terms, privacy policy, help, version, sign out at bottom with confirmation | Yes | sign-out revokes session (existing) | existing auth tests PASS | NOT TESTED |
+| Safety options (defaults on; escalation needs consent + a contact; offline queue always on) wired to siren/notification/vibration, trek GPS and contact texting; synced to account | Yes | Yes | backend PASS | NOT TESTED |
+| Android permission status + request + open settings (notifications, location, nearby devices; background location / SMS / microphone not used) | Yes | — | — | NOT TESTED |
+| Regression: SOS, relay, gateway, offline queue, alerts | unchanged code paths | | gateway 33, backend 82, mobile 9 scripts PASS | NOT RE-TESTED on phones |
+
+## Cloud fix, messaging, demo data — 2026-11-22 (app 1.0.5 build 6, not committed)
+
+| Item | Result |
+|---|---|
+| Cause of "can't post / cloud not working" | The Mac had stopped all services and both quick tunnels (530 from Cloudflare). Restarted; servers and tunnels now run under `caffeinate -i` so idle sleep does not stop them (closing the lid still does). New tunnel addresses are built into 1.0.5. |
+| Follower messaging: inbox, chat (refreshes every 4 s), Message button on profiles of people who follow you, unread badge on Feed | Backend PASS (4 tests); UI built; NOT TESTED on a phone yet |
+| Rules: start a chat only with someone who follows you; either side can reply; blocking stops it; only the two people can read it | PASS (unit) |
+| Dev-only demo data: 4 "… (demo)" accounts @demo.trackmate.test (unusable passwords), 6 posts with landscapes drawn in code, likes, comments, demo messages; `manage.py remove-demo` deletes all of it | PASS (unit); seeded for jivitesh@test.com and test.trekker@example.com |
+| Feed, demo images, like/unlike, post detail + comments over the public tunnel from a phone on mobile data | PASS (physical, Phone 1: backend log + screenshot) |
+| Creating a post (photo upload) on the phone | NOT TESTED yet |

@@ -3,6 +3,7 @@
 Separate from the SignalMesh edge gateway; the gateway keeps working without it.
 """
 
+import json
 import logging
 import time
 import uuid
@@ -15,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from pathlib import Path
 
-from . import incidents, profile, security
+from . import events, incidents, messages, plans, profile, security, social
 from .config import REQUIRED_CONSENTS, SEPARATE_CONSENTS, Settings, load_settings
 from .db import Database, now_iso
 from .models import ForgotIn, LoginIn, RegisterIn, ResetIn, check_password, identifier_key
@@ -55,7 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def user_json(user_id: str) -> dict:
         u = db.one("SELECT id, full_name, email, phone, email_verified, phone_verified, created_at, role, "
-                   "travel_preferences, trekking_experience, intro, photo_path, updated_at FROM users WHERE id = ?", user_id)
+                   "travel_preferences, trekking_experience, intro, photo_path, updated_at, username, interests, home_location, show_home_location "
+                   "FROM users WHERE id = ?", user_id)
         contacts = db.all("SELECT id, name, phone, relationship FROM emergency_contacts WHERE user_id = ? ORDER BY created_at", user_id)
         consents = db.all(
             "SELECT consent_type, document_version, accepted, recorded_at FROM consents WHERE user_id = ? ORDER BY id", user_id)
@@ -66,6 +68,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "role": u["role"],
             "travel_preferences": u["travel_preferences"], "trekking_experience": u["trekking_experience"],
             "intro": u["intro"], "has_photo": bool(u["photo_path"]), "updated_at": u["updated_at"],
+            "username": u["username"], "interests": json.loads(u["interests"]) if u["interests"] else [],
+            "home_location": u["home_location"], "show_home_location": bool(u["show_home_location"]),
             "emergency_contacts": [dict(c) for c in contacts],
             "consents": [{**dict(c), "accepted": bool(c["accepted"])} for c in consents],
         }
@@ -216,5 +220,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok"}
 
     profile.register(app, db, settings, current_user, user_json, deliver_code, Path(settings.photo_dir))
+    events.register(app, db, settings, current_user)
+    social.register(app, db, settings, current_user)  # after profile: /v1/users/me/* routes win over /v1/users/{id}/*
+    plans.register(app, db, current_user)
+    messages.register(app, db, current_user)
     app.state.hub = incidents.register(app, db, settings, current_user)
     return app

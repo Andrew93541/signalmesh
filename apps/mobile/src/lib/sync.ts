@@ -17,6 +17,7 @@ import { flushCheckin } from './checkin';
 import { GatewayError, gatewayAt } from './gateway';
 import { netStore, onNetworkChange } from './network';
 import { applyAckStatus, awaitingAckItems, markFailed, markSent, queuedItems } from './outbox';
+import { noteSeenBy } from './seenBy';
 import { getSettings } from './settings';
 import { createStore } from './store';
 
@@ -110,7 +111,9 @@ async function pass(): Promise<boolean> {
     let unknownEverywhere = true;
     for (const client of [active.client, ...others]) {
       try {
-        applyAckStatus(item.message.message_id, await client.ackStatus(item.message.message_id));
+        const ack = await client.ackStatus(item.message.message_id);
+        applyAckStatus(item.message.message_id, ack);
+        if (ack.seen_by?.length) noteSeenBy(item.message.message_id, ack.seen_by, 'SERVER');
         unknownEverywhere = false;
         break;
       } catch (e) {

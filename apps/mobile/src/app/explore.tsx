@@ -10,7 +10,7 @@ export default function Explore() {
   const { mode } = useStore(prefsStore);
   const trekker = mode === 'TREKKER';
   return (
-    <Screen tab>
+    <Screen>
       <Txt v="title1">Explore</Txt>
       <EmptyState
         icon="travel_explore"

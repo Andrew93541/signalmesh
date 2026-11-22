@@ -6,8 +6,10 @@ import { outboxStore } from '@/lib/outbox';
 import { useStore } from '@/lib/store';
 import { linkStore } from '@/lib/sync';
 import { contactsStore } from '@/trackmate/contacts';
+import { safetyStore } from '@/trackmate/safetyPrefs';
 import { smsUri, sosSmsText } from '@/trackmate/smsText';
 import { describeStatus, statusSteps } from '@/trackmate/sosStatus';
+import { seenByStore } from '@/lib/seenBy';
 import { Banner, Button, Card, EmptyState, Icon, Screen, Section, Txt } from '@/ui/kit';
 import { color, space } from '@/ui/theme';
 
@@ -23,6 +25,8 @@ export default function SosStatus() {
   const alarmOn = useStore(alarmStore);
   const link = useStore(linkStore);
   const contacts = useStore(contactsStore);
+  const safety = useStore(safetyStore);
+  const seen = useStore(seenByStore)[id] ?? [];
 
   if (!item) {
     return (
@@ -45,6 +49,18 @@ export default function SosStatus() {
       <View accessibilityLiveRegion="polite">
         <Banner tone={BANNER_TONE[view.tone]} icon={view.icon} title={view.title} body={view.body} />
       </View>
+
+      {seen.length ? (
+        <Card>
+          <Txt v="headline">Seen by {seen.length} nearby TrackMate {seen.length === 1 ? 'user' : 'users'}</Txt>
+          {seen.map((p) => (
+            <Txt key={p.device_id} v="footnote" c={color.text2}>
+              {p.name || p.device_id} acknowledged at {time(p.acknowledged_at)} · {p.via === 'SERVER' ? 'confirmed by the safety network' : 'reported by a nearby phone'}
+            </Txt>
+          ))}
+          <Txt v="caption" c={color.text2}>A nearby person, not a responder. Responders acknowledge separately.</Txt>
+        </Card>
+      ) : null}
 
       {waiting && link.state !== 'online' ? (
         <Txt v="footnote" c={color.text2}>
@@ -88,7 +104,7 @@ export default function SosStatus() {
       </Section>
 
       <Section title="Tell people you trust">
-        {contacts.length > 0 ? (
+        {contacts.length > 0 && safety.trusted_contact_notifications ? (
           <>
             <Button
               label={`Text ${contacts.length === 1 ? contacts[0].name : `${contacts.length} trusted contacts`}`}

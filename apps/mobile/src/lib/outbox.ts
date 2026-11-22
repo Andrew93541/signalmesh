@@ -76,6 +76,7 @@ export function createSos(input: {
   location_is_last_known?: boolean | null;
   user_id?: string | null;
   worker_name?: string;
+  sender_phone?: string | null; // only when the sender opted in to calls from nearby TrackMate users
 }): SosMessage {
   const { deviceId, workerName } = getSettings();
   const hasFix = input.latitude !== null && input.longitude !== null;
@@ -92,6 +93,7 @@ export function createSos(input: {
     location_source: hasFix ? input.location_source ?? null : null,
     location_is_last_known: hasFix ? input.location_is_last_known ?? null : null,
     user_id: input.user_id ?? null,
+    ...(input.sender_phone ? { sender_phone: input.sender_phone } : {}),
     created_at: new Date().toISOString(),
     hop_count: 0,
     hops: [deviceId],

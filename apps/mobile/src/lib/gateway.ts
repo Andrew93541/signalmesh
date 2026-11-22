@@ -3,6 +3,10 @@ import { getSettings } from './settings';
 
 const TIMEOUT_MS = 4000;
 
+export interface PeerAckBody {
+  message_id: string; recipient_device_id: string; recipient_name: string | null; recipient_user_id: string | null; acknowledged_at: string;
+}
+
 export class GatewayError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
@@ -56,6 +60,10 @@ export function gatewayAt(baseUrl?: string) {
 
   ackStatus: (messageId: string) =>
     req<AckStatus>(`/gateway/ack-status/${encodeURIComponent(messageId)}`),
+
+  /** A nearby person acknowledged an SOS on their phone (not a responder acknowledgement). */
+  peerAck: (a: PeerAckBody) =>
+    req<{ status: string; duplicate: boolean }>('/gateway/peer-ack', { method: 'POST', body: JSON.stringify(a) }),
 
   checkin: (payload: CheckinPayload) =>
     req<unknown>('/gateway/checkin', { method: 'POST', body: JSON.stringify(payload) }),

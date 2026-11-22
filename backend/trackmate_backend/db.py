@@ -145,6 +145,187 @@ MIGRATIONS = [
         used_at TEXT
     );
     """,
+    # 4: FEEDS — events. Event lifecycle (events.status) and participant applications
+    # (event_applications.status) are separate state machines in separate tables.
+    """
+    CREATE TABLE event_categories (
+        code TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        sort INTEGER NOT NULL
+    );
+    INSERT INTO event_categories (code, label, sort) VALUES
+        ('TREK', 'Trek', 1), ('HIKE', 'Day hike', 2), ('CAMPING', 'Camping', 3), ('CYCLING', 'Cycling', 4),
+        ('CITY_WALK', 'City walk', 5), ('CULTURAL', 'Cultural tour', 6), ('VOLUNTEER', 'Volunteering', 7), ('OTHER', 'Other', 8);
+    CREATE TABLE events (
+        id TEXT PRIMARY KEY,
+        organizer_id TEXT NOT NULL REFERENCES users(id),
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL REFERENCES event_categories(code),
+        cover_path TEXT,
+        start_location TEXT NOT NULL DEFAULT '',
+        destination TEXT NOT NULL DEFAULT '',
+        start_lat REAL,
+        start_lon REAL,
+        start_at TEXT,
+        end_at TEXT,
+        duration_minutes INTEGER,
+        difficulty TEXT,
+        participant_limit INTEGER,
+        price_minor INTEGER NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'INR',
+        requirements TEXT NOT NULL DEFAULT '',
+        organizer_contact TEXT NOT NULL DEFAULT '',
+        visibility TEXT NOT NULL DEFAULT 'PUBLIC',
+        approval_mode TEXT NOT NULL DEFAULT 'MANUAL',
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        status_reason TEXT,
+        submitted_at TEXT,
+        reviewed_by TEXT REFERENCES users(id),
+        reviewed_at TEXT,
+        published_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX ix_events_status_start ON events(status, visibility, start_at);
+    CREATE INDEX ix_events_organizer ON events(organizer_id, updated_at);
+    CREATE INDEX ix_events_location ON events(start_lat, start_lon);
+    CREATE INDEX ix_events_category ON events(category);
+    CREATE TABLE event_applications (
+        id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL REFERENCES events(id),
+        user_id TEXT NOT NULL REFERENCES users(id),
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (event_id, user_id)
+    );
+    CREATE INDEX ix_event_applications_event ON event_applications(event_id, status);
+    """,
+    # 5: social feed, public profile fields, plans/entitlements, safety preferences.
+    # Media files live on disk (data/media); rows hold only metadata and a server-chosen file name.
+    """
+    ALTER TABLE users ADD COLUMN username TEXT;
+    ALTER TABLE users ADD COLUMN interests TEXT;
+    ALTER TABLE users ADD COLUMN home_location TEXT;
+    ALTER TABLE users ADD COLUMN show_home_location INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN safety_prefs TEXT;
+    CREATE UNIQUE INDEX ux_users_username ON users(username) WHERE username IS NOT NULL;
+    CREATE TABLE posts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        caption TEXT NOT NULL DEFAULT '',
+        location_name TEXT,
+        latitude REAL,
+        longitude REAL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+    );
+    CREATE INDEX ix_posts_created ON posts(created_at DESC) WHERE deleted_at IS NULL;
+    CREATE INDEX ix_posts_user ON posts(user_id, created_at DESC);
+    CREATE TABLE media (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL REFERENCES users(id),
+        post_id TEXT REFERENCES posts(id),
+        kind TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        path TEXT NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX ix_media_post ON media(post_id, sort);
+    CREATE TABLE post_likes (
+        post_id TEXT NOT NULL REFERENCES posts(id),
+        user_id TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (post_id, user_id)
+    );
+    CREATE TABLE post_comments (
+        id TEXT PRIMARY KEY,
+        post_id TEXT NOT NULL REFERENCES posts(id),
+        user_id TEXT NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT
+    );
+    CREATE INDEX ix_comments_post ON post_comments(post_id, created_at);
+    CREATE TABLE follows (
+        follower_id TEXT NOT NULL REFERENCES users(id),
+        followee_id TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (follower_id, followee_id)
+    );
+    CREATE INDEX ix_follows_followee ON follows(followee_id, created_at DESC);
+    CREATE TABLE blocks (
+        blocker_id TEXT NOT NULL REFERENCES users(id),
+        blocked_id TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (blocker_id, blocked_id)
+    );
+    CREATE TABLE reports (
+        id TEXT PRIMARY KEY,
+        reporter_id TEXT NOT NULL REFERENCES users(id),
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        details TEXT,
+        status TEXT NOT NULL DEFAULT 'OPEN',
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX ix_reports_status ON reports(status, created_at);
+    CREATE TABLE plan_products (
+        code TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        price_minor INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        billing TEXT NOT NULL,
+        includes TEXT NOT NULL,
+        sort INTEGER NOT NULL
+    );
+    INSERT INTO plan_products (code, name, description, price_minor, currency, billing, includes, sort) VALUES
+        ('TRIP_BUNDLE', 'Complete Trip Bundle', 'Community access and active SOS sending for one trek, with three group passes.', 19900, 'INR', 'PER_TRIP', '["COMMUNITY","ACTIVE_SOS","GROUP_PASS_3"]', 1),
+        ('COMMUNITY_ADDON', 'Community add-on', 'Community access for one trek.', 14900, 'INR', 'PER_TRIP', '["COMMUNITY"]', 2),
+        ('SOS_ADDON', 'Active SOS add-on', 'Active SOS sending for one trek.', 14900, 'INR', 'PER_TRIP', '["ACTIVE_SOS"]', 3);
+    CREATE TABLE trip_entitlements (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        trip_ref TEXT NOT NULL,
+        product_code TEXT NOT NULL REFERENCES plan_products(code),
+        status TEXT NOT NULL,
+        payment_status TEXT NOT NULL,
+        valid_from TEXT,
+        valid_until TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX ux_entitlement_live ON trip_entitlements(user_id, trip_ref, product_code) WHERE status IN ('PENDING_PAYMENT', 'ACTIVE');
+    """,
+    # 6: direct messages between people who follow each other (or where the recipient follows the sender).
+    """
+    CREATE TABLE conversations (
+        id TEXT PRIMARY KEY,
+        user_a TEXT NOT NULL REFERENCES users(id),
+        user_b TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        last_message_at TEXT,
+        UNIQUE (user_a, user_b)
+    );
+    CREATE INDEX ix_conversations_a ON conversations(user_a, last_message_at DESC);
+    CREATE INDEX ix_conversations_b ON conversations(user_b, last_message_at DESC);
+    CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
+        sender_id TEXT NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        read_at TEXT
+    );
+    CREATE INDEX ix_messages_conv ON messages(conversation_id, created_at DESC);
+    """,
 ]
 
 

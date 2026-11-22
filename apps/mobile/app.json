@@ -2,7 +2,7 @@
   "expo": {
     "name": "TrackMate",
     "slug": "trackmate",
-    "version": "1.0.1",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "trackmate",
@@ -34,7 +34,7 @@
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
-      "versionCode": 2
+      "versionCode": 8
     },
     "web": {
       "output": "server",
@@ -61,7 +61,8 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "minSdkVersion": 26
           }
         }
       ],
@@ -73,7 +74,8 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

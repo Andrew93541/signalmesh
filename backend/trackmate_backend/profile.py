@@ -10,6 +10,7 @@ Rules:
   every other session.
 """
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +18,7 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from . import security
 from .db import Database, now_iso
@@ -36,6 +37,10 @@ Experience = Literal["NONE", "BEGINNER", "INTERMEDIATE", "EXPERIENCED", "EXPERT"
 class ProfileIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     full_name: Name | None = None
+    username: Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True, pattern=r"^[A-Za-z0-9_.]{3,30}$")] | None = None
+    interests: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]] | None = Field(default=None, max_length=10)
+    home_location: Text(80) | None = None
+    show_home_location: bool | None = None
     travel_preferences: Text(300) | None = None
     trekking_experience: Experience | None = None
     intro: Text(500) | None = None
@@ -80,9 +85,16 @@ def register(app: FastAPI, db: Database, settings, current_user, user_json, deli
         changes = body.model_dump(exclude_unset=True)
         if "full_name" in changes and changes["full_name"] is None:
             raise HTTPException(422, "Full name cannot be empty.")
+        if "username" in changes and changes["username"] and db.one("SELECT 1 FROM users WHERE username = ? AND id != ?", changes["username"], auth[0]):
+            raise HTTPException(409, "That username is taken.")
+        if "interests" in changes:
+            changes["interests"] = json.dumps(changes["interests"]) if changes["interests"] else None
+        if "show_home_location" in changes:
+            changes["show_home_location"] = int(bool(changes["show_home_location"]))
         if changes:
             cols = ", ".join(f"{k} = ?" for k in changes)  # keys come from ProfileIn only
-            db.run(f"UPDATE users SET {cols}, updated_at = ? WHERE id = ?", *[v or None for v in changes.values()], now_iso(), auth[0])
+            vals = [v if k == "show_home_location" else (v or None) for k, v in changes.items()]
+            db.run(f"UPDATE users SET {cols}, updated_at = ? WHERE id = ?", *vals, now_iso(), auth[0])
         return user_json(auth[0])
 
     # ---- photo ------------------------------------------------------------------

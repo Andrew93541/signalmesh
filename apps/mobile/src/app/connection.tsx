@@ -40,6 +40,11 @@ export default function ConnectionSettings() {
         <SettingField label="Your name" value={settings.workerName}
           hint="Shown to responders with your SOS."
           onSave={(v) => saveSettings({ workerName: v || 'Worker' })} />
+        <Card>
+          <SwitchRow title="Let nearby TrackMate users call me during an SOS"
+            subtitle="Adds your account phone number to your SOS so people near you can tap Call. Anyone nearby with TrackMate can see it. Off by default."
+            value={settings.shareCallNumber} onChange={(v) => saveSettings({ shareCallNumber: v })} />
+        </Card>
       </Section>
 
       <Section title="Safety station">

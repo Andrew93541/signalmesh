@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket,
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import Settings, load_settings
-from .models import AckIn, CheckinIn, NodeHeartbeatIn, ResolveIn, SosIn
+from .models import AckIn, CheckinIn, NodeHeartbeatIn, PeerAckIn, ResolveIn, SosIn
 from .store import Store, iso, utcnow
 
 log = logging.getLogger("signalmesh.gateway")
@@ -94,6 +94,28 @@ async def forward_upstream_once(store: Store, settings: Settings, post: Callable
     return sent
 
 
+async def forward_peer_acks_once(store: Store, settings: Settings, post: Callable = post_json) -> int:
+    """Send nearby acknowledgements upstream. 404 = backend does not have the SOS yet: retry later."""
+    sent = 0
+    for a in store.pending_peer_acks():
+        payload = {k: a[k] for k in ("message_id", "recipient_device_id", "recipient_name", "recipient_user_id", "acknowledged_at")}
+        try:
+            await asyncio.to_thread(post, f"{settings.upstream_url}/gateway/peer-ack", payload, settings.upstream_token)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                store.mark_peer_ack(a["message_id"], a["recipient_device_id"], "PENDING", "SOS not upstream yet")
+                continue
+            if e.code in _PERMANENT:
+                store.mark_peer_ack(a["message_id"], a["recipient_device_id"], "REJECTED", f"HTTP {e.code}")
+                continue
+            break
+        except (urllib.error.URLError, OSError, TimeoutError):
+            break
+        store.mark_peer_ack(a["message_id"], a["recipient_device_id"], "SENT")
+        sent += 1
+    return sent
+
+
 async def sync_once(store: Store, settings: Settings, state: dict, publish: Callable,
                     get: Callable = get_json, post: Callable = post_json) -> int:
     """Pull responder actions from the backend and push this gateway's status.
@@ -151,6 +173,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if store.pending_upstream(limit=1):
                     await forward_upstream_once(store, settings)
                     state["upstream_reachable"] = not store.pending_upstream(limit=1)
+                if settings.upstream_url and store.pending_peer_acks(limit=1):
+                    await forward_peer_acks_once(store, settings)
             except Exception:
                 log.exception("upstream loop error")
             await asyncio.sleep(settings.upstream_retry_seconds)
@@ -264,7 +288,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/gateway/ack-status/{message_id}")
     async def ack_status(message_id: str):
         msg = store.get_message(message_id) or not_found(message_id)
-        return {k: msg[k] for k in ("message_id", "status", "acknowledged_by", "acknowledged_at")}
+        # seen_by (additive): nearby TrackMate users who acknowledged it on their phone. Not a responder ack.
+        return {**{k: msg[k] for k in ("message_id", "status", "acknowledged_by", "acknowledged_at")}, "seen_by": store.seen_by(message_id)}
+
+    @app.post("/gateway/peer-ack", status_code=201)
+    async def peer_ack(body: PeerAckIn, response: Response):
+        new = store.save_peer_ack(body, upstream=bool(settings.upstream_url))
+        if not new:
+            response.status_code = 200
+        else:
+            log.info("nearby acknowledgement for %s by %s", body.message_id, body.recipient_device_id)
+            await hub.publish("sos.peer_ack", {"message_id": body.message_id, "device_id": body.recipient_device_id})
+        return {"status": "recorded", "duplicate": not new, "node_id": settings.node_id}
 
     @app.post("/gateway/ack/{message_id}")
     async def acknowledge(message_id: str, body: AckIn):

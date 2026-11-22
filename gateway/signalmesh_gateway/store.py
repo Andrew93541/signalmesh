@@ -6,7 +6,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .models import CheckinIn, NodeHeartbeatIn, SosIn
+from .models import CheckinIn, NodeHeartbeatIn, PeerAckIn, SosIn
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -56,6 +56,18 @@ CREATE TABLE IF NOT EXISTS checkins (
     received_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_checkins_device ON checkins(device_id, checked_in_at);
+
+CREATE TABLE IF NOT EXISTS peer_acks (
+    message_id          TEXT NOT NULL,
+    recipient_device_id TEXT NOT NULL,
+    recipient_name      TEXT,
+    recipient_user_id   TEXT,
+    acknowledged_at     TEXT NOT NULL,
+    received_at         TEXT NOT NULL,
+    upstream_state      TEXT NOT NULL DEFAULT 'PENDING',
+    last_error          TEXT,
+    PRIMARY KEY (message_id, recipient_device_id)
+);
 
 CREATE TABLE IF NOT EXISTS nodes (
     node_id    TEXT PRIMARY KEY,
@@ -325,3 +337,35 @@ class Store:
         with self._lock:
             rows = self._db.execute("SELECT * FROM nodes ORDER BY node_id").fetchall()
         return [{**dict(r), "online": parse(r["last_seen"]) >= cutoff} for r in rows]
+
+    # ---- nearby acknowledgements (a person near the sender saw the SOS) ------------------
+
+    def save_peer_ack(self, a: PeerAckIn, upstream: bool) -> bool:
+        """Durably records it. Returns False when this device already acknowledged this SOS."""
+        with self._lock:
+            cur = self._db.execute(
+                """INSERT OR IGNORE INTO peer_acks (message_id, recipient_device_id, recipient_name, recipient_user_id,
+                   acknowledged_at, received_at, upstream_state) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (a.message_id, a.recipient_device_id, a.recipient_name, a.recipient_user_id, a.acknowledged_at,
+                 iso(utcnow()), "PENDING" if upstream else "NONE"),
+            )
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def seen_by(self, message_id: str) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT recipient_device_id, recipient_name, acknowledged_at FROM peer_acks WHERE message_id = ? ORDER BY acknowledged_at",
+                (message_id,)).fetchall()
+        return [{"device_id": r[0], "name": r[1], "acknowledged_at": r[2]} for r in rows]
+
+    def pending_peer_acks(self, limit: int = 50) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM peer_acks WHERE upstream_state = 'PENDING' ORDER BY received_at LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_peer_ack(self, message_id: str, device_id: str, state: str, error: str | None = None):
+        with self._lock:
+            self._db.execute("UPDATE peer_acks SET upstream_state = ?, last_error = ? WHERE message_id = ? AND recipient_device_id = ?",
+                             (state, error, message_id, device_id))
+            self._db.commit()

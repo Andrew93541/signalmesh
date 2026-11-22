@@ -28,3 +28,7 @@ assert.equal(preferBuiltAddress('http://192.168.43.1:8080', B), 'http://192.168.
 assert.equal(preferBuiltAddress('https://mine.example.org', B), 'https://mine.example.org');
 assert.equal(preferBuiltAddress('http://127.0.0.1:8000', ''), 'http://127.0.0.1:8000'); // no built address: unchanged
 console.log('preferBuiltAddress: all assertions passed');
+const T = 'https://new-tunnel-words.trycloudflare.com';
+assert.equal(preferBuiltAddress('https://old-tunnel-words.trycloudflare.com', T), T); // dead quick tunnel replaced
+assert.equal(preferBuiltAddress('https://gw.example.org', T), 'https://gw.example.org'); // real address kept
+console.log('preferBuiltAddress (tunnels): all assertions passed');

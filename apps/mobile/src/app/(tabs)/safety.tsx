@@ -65,6 +65,7 @@ export default function Safety() {
         category, priority, ...fix,
         user_id: account?.id ?? null,
         worker_name: account?.full_name,
+      sender_phone: settings.shareCallNumber ? account?.phone ?? null : null,
       }); // saved locally before any network call
       syncNow();
       router.push({ pathname: '/sos/[id]', params: { id: message.message_id } });

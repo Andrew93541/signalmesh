@@ -18,4 +18,6 @@ dependencies {
   // Google Nearby Connections: phone-to-phone over Bluetooth / BLE / Wi-Fi Direct,
   // no shared network or internet needed.
   implementation 'com.google.android.gms:play-services-nearby:19.3.0'
+  // Android Health Connect (Analytics): read-only steps, distance, calories, exercise sessions.
+  implementation 'androidx.health.connect:connect-client:1.1.0'
 }

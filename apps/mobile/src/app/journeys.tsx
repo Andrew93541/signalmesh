@@ -44,7 +44,7 @@ export default function Journeys() {
   const newJourney = () => router.push({ pathname: '/journey/new', params: { type: mode === 'TREKKER' ? 'TREK' : 'TRIP' } });
 
   return (
-    <Screen tab>
+    <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Txt v="title1">Journeys</Txt>
         <Button label="New" icon="add" compact onPress={newJourney} />

@@ -1,6 +1,12 @@
 package expo.modules.signalmeshnearby
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import android.util.Log
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.nearby.Nearby
@@ -61,7 +67,15 @@ class SignalMeshNearbyModule : Module() {
   private val payloadCallback = object : PayloadCallback() {
     override fun onPayloadReceived(endpointId: String, payload: Payload) {
       val bytes = payload.asBytes() ?: return
-      emit("onMessage", "endpointId" to endpointId, "name" to peers[endpointId], "data" to String(bytes, Charsets.UTF_8))
+      val data = String(bytes, Charsets.UTF_8)
+      // Raise the recipient alert here, in native code, so it works even if JS is paused.
+      try {
+        val f = JSONObject(data)
+        if (f.optInt("v") == 1 && f.optString("t") == "SOS") {
+          f.optJSONObject("msg")?.let { SosAlerts.handleIncoming(context.applicationContext, it, localName.removePrefix("TM:"), "mesh:${peers[endpointId] ?: endpointId}") }
+        }
+      } catch (e: Exception) { Log.w(tag, "alert check failed", e) }
+      emit("onMessage", "endpointId" to endpointId, "name" to peers[endpointId], "data" to data)
     }
     override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {}
   }
@@ -104,9 +118,75 @@ class SignalMeshNearbyModule : Module() {
     }
   }
 
+  private fun bundleOf(m: Map<String, Any>) = Bundle().apply {
+    for ((k, v) in m) when (v) { is Boolean -> putBoolean(k, v); is Double -> putDouble(k, v); is String -> putString(k, v) }
+  }
+
+  /** Show the alert screen over the lock screen only when opened from an SOS alert. */
+  private fun applyLockScreen(intent: Intent?) {
+    val id = intent?.getStringExtra("trackmate_sos_alert") ?: return
+    val act = appContext.currentActivity ?: return
+    act.runOnUiThread {
+      if (Build.VERSION.SDK_INT >= 27) { act.setShowWhenLocked(true); act.setTurnScreenOn(true) }
+    }
+    launchAlert = id
+  }
+  @Volatile private var launchAlert: String? = null
+
   override fun definition() = ModuleDefinition {
     Name("SignalMeshNearby")
-    Events("onPeer", "onMessage", "onLog")
+    Events("onPeer", "onMessage", "onLog", "onAlert", "onAck")
+
+    OnCreate {
+      SosAlerts.listener = { event, bundle -> try { sendEvent(event, bundle) } catch (_: Exception) {} }
+    }
+    OnNewIntent { intent -> applyLockScreen(intent) }
+    OnActivityEntersForeground { applyLockScreen(appContext.currentActivity?.intent) }
+
+    // ---- recipient alerts ----
+    Function("alertStatus") { SosAlerts.status(context) }
+    Function("setAlertPrefs") { enabled: Boolean, volume: Double, vibrate: Boolean, sound: Boolean, notify: Boolean ->
+      SosAlerts.setPrefs(context, enabled, volume, vibrate, sound, notify); true
+    }
+    /** For SOS received over the Wi-Fi relay (JS side); the mesh path is handled natively above. */
+    Function("handleIncomingSos") { json: String, source: String ->
+      SosAlerts.handleIncoming(context.applicationContext, JSONObject(json), localName.removePrefix("TM:").ifEmpty { null }, source)
+    }
+    Function("getAlert") { id: String -> SosAlerts.getAlert(context, id)?.toString() }
+    Function("listAlerts") { SosAlerts.listAlerts(context).map { it.toString() } }
+    Function("acknowledge") { id: String -> SosAlerts.acknowledge(context.applicationContext, id)?.toString() }
+    Function("markAckConfirmed") { id: String, via: String -> SosAlerts.markAckConfirmed(context.applicationContext, id, via)?.toString() }
+    Function("pendingAcks") { SosAlerts.pendingAcks(context).map { it.toString() } }
+    Function("resolveAlert") { id: String, status: String -> SosAlerts.resolve(context.applicationContext, id, status)?.toString() }
+    Function("testSiren") { SosAlerts.startSiren(context.applicationContext, null, 3000L); true }
+    Function("stopSiren") { SosAlerts.stopSiren(context.applicationContext); true }
+    Function("consumeLaunchAlert") {
+      applyLockScreen(appContext.currentActivity?.intent)
+      val id = launchAlert; launchAlert = null; id
+    }
+    Function("releaseLockScreen") {
+      appContext.currentActivity?.let { act ->
+        act.runOnUiThread { if (Build.VERSION.SDK_INT >= 27) { act.setShowWhenLocked(false); act.setTurnScreenOn(false) } }
+        act.intent?.removeExtra("trackmate_sos_alert")
+      }
+      true
+    }
+    Function("openNotificationSettings") {
+      val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(i); true
+    }
+    Function("openFullScreenSettings") {
+      val i = if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}"))
+              else Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+      context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true
+    }
+
+    // ---- background listening (foreground service) ----
+    Function("startService") {
+      try { ContextCompat.startForegroundService(context, Intent(context, MeshService::class.java)); true }
+      catch (e: Exception) { Log.w(tag, "foreground service refused", e); false }
+    }
+    Function("stopService") { context.stopService(Intent(context, MeshService::class.java)); true }
 
     AsyncFunction("start") { name: String, promise: Promise ->
       localName = name

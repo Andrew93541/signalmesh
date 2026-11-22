@@ -29,6 +29,10 @@ export interface Account {
   intro?: string | null;
   has_photo?: boolean;
   updated_at?: string | null;
+  username?: string | null;
+  interests?: string[];
+  home_location?: string | null;
+  show_home_location?: boolean;
   emergency_contacts: EmergencyContact[];
   consents: { consent_type: string; document_version: string; accepted: boolean; recorded_at: string }[];
 }
@@ -47,7 +51,7 @@ export class ApiError extends Error {
 
 export const backendBase = () => prefsStore.get().backendUrl.trim().replace(/\/+$/, '');
 
-async function api<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
+export async function api<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const base = backendBase();
   if (!base) throw new ApiError('No account server is set up. Add its address under "Account server settings".', 0);
   const controller = new AbortController();
@@ -169,7 +173,7 @@ async function authed(path: string, init: RequestInit = {}): Promise<Account> {
   }
 }
 
-export type ProfileChanges = Partial<Pick<Account, 'full_name' | 'travel_preferences' | 'trekking_experience' | 'intro'>>;
+export type ProfileChanges = Partial<Pick<Account, 'full_name' | 'travel_preferences' | 'trekking_experience' | 'intro' | 'username' | 'interests' | 'home_location' | 'show_home_location'>>;
 export const updateProfile = (changes: ProfileChanges) =>
   authed('/v1/users/me', { method: 'PATCH', body: JSON.stringify(changes) });
 

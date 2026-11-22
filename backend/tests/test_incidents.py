@@ -208,3 +208,30 @@ def test_incident_links_to_real_account_and_shows_only_needed_details(env):
     assert inc["person"]["emergency_contacts"][0]["name"] == "Asha Kumar"
     assert "email" not in inc["person"] and "password_hash" not in str(inc)
     assert c.get("/v1/admin/incidents/SM-incident-002", headers=h).json()["person"] is None
+
+
+def peer_ack(mid="SM-incident-001", device="MOBILE_0DF5", **over):
+    b = {"message_id": mid, "recipient_device_id": device, "recipient_name": "Bina", "acknowledged_at": "2026-11-22T10:00:00.000Z"}
+    b.update(over)
+    return b
+
+
+def test_peer_ack_is_an_event_not_a_responder_acknowledgement(env):
+    c = env["c"]
+    assert c.post("/gateway/peer-ack", json=peer_ack(), headers=env["gw"]).status_code == 404  # SOS not here yet: gateway retries
+    c.post("/gateway/sos", json=sos(), headers=env["gw"])
+    r = c.post("/gateway/peer-ack", json=peer_ack(), headers=env["gw"])
+    assert r.status_code == 201 and r.json()["duplicate"] is False
+    assert c.post("/gateway/peer-ack", json=peer_ack(), headers=env["gw"]).json()["duplicate"] is True
+    inc = c.get("/v1/admin/incidents/SM-incident-001", headers=env["resp"]).json()
+    assert inc["incident_state"] == "OPEN" and inc["acknowledged_by"] is None
+    acks = [e for e in inc["events"] if e["kind"] == "PEER_ACK"]
+    assert len(acks) == 1 and acks[0]["actor"] == "Bina" and acks[0]["detail"]["recipient_device_id"] == "MOBILE_0DF5"
+    assert acks[0]["detail"]["recipient_user_id"] is None  # unknown account ids are not linked
+
+
+def test_peer_ack_needs_gateway_credential(env):
+    c = env["c"]
+    c.post("/gateway/sos", json=sos(), headers=env["gw"])
+    assert c.post("/gateway/peer-ack", json=peer_ack()).status_code == 401
+    assert c.post("/gateway/peer-ack", json=peer_ack(), headers=env["user"]).status_code == 401

@@ -31,6 +31,9 @@ export interface SosMessage {
   location_source?: 'DEVICE' | 'DEVICE_LAST_KNOWN' | null;
   location_is_last_known?: boolean | null;
   user_id?: string | null; // TrackMate account, when the sender is signed in
+  // Only if the sender turned on "let nearby TrackMate users call me". Travels phone to phone
+  // for the CALL SENDER button; the gateway drops it (not stored or forwarded).
+  sender_phone?: string | null;
   created_at: string; // ISO-8601
   hop_count: number;
   hops: string[];
@@ -43,6 +46,8 @@ export interface AckStatus {
   status: SosStatus;
   acknowledged_by?: string | null;
   acknowledged_at?: string | null;
+  // Additive: nearby TrackMate users who acknowledged the SOS on their phone (not responders).
+  seen_by?: { device_id: string; name: string | null; acknowledged_at: string }[];
 }
 
 // Body of POST /gateway/checkin (dead-man timer heartbeat)

@@ -19,13 +19,16 @@ import { PermissionsAndroid, Platform } from 'react-native';
 
 import { Nearby } from '../../modules/signalmesh-nearby';
 
+import type { PeerAck } from './alertFormat';
 import { isStatus, type SosMessage, type SosStatus } from './contract';
 import { gatewayAt } from './gateway';
 import { applyAckStatus, markSent, outboxStore, queuedItems, statusRank } from './outbox';
 import {
   acceptSosMessage, forwardOnce, noteMeshHandoff, pendingRelayMessages, relayAwaitingStatus, relayStatuses, setRelayStatus,
 } from './relay';
+import { noteSeenBy } from './seenBy';
 import { getSettings, settingsStore } from './settings';
+import { flushPeerAcks, onResponderStatus, peerAckOutbox, queuePeerAck, setMeshPeerAckSender } from './sosAlerts';
 import { createStore } from './store';
 import { activeRouteUrl, linkStore, syncNow } from './sync';
 
@@ -33,7 +36,9 @@ type Frame =
   | { v: 1; t: 'HELLO'; node: string; online: boolean }
   | { v: 1; t: 'SOS'; msg: SosMessage }
   | { v: 1; t: 'ACK'; id: string; status: SosStatus }
-  | { v: 1; t: 'STATUS'; id: string; status: SosStatus; by?: string | null; at?: string | null };
+  | { v: 1; t: 'STATUS'; id: string; status: SosStatus; by?: string | null; at?: string | null }
+  // A nearby person acknowledged an SOS on their phone. Passed toward the sender and to any gateway.
+  | { v: 1; t: 'PEER_ACK'; ack: PeerAck };
 
 export interface MeshPeer { endpointId: string; node: string; online: boolean | null; since: string }
 export interface MeshState {
@@ -92,12 +97,13 @@ async function ensurePermissions(): Promise<string | null> {
   const wanted = [
     P.ACCESS_FINE_LOCATION,
     ...(v >= 31 ? [P.BLUETOOTH_SCAN, P.BLUETOOTH_ADVERTISE, P.BLUETOOTH_CONNECT] : []),
-    ...(v >= 33 ? [P.NEARBY_WIFI_DEVICES] : []),
+    ...(v >= 33 ? [P.NEARBY_WIFI_DEVICES, P.POST_NOTIFICATIONS] : []),
   ].filter(Boolean) as (typeof P)[keyof typeof P][];
   const res = await PermissionsAndroid.requestMultiple(wanted);
   const denied = wanted.filter((p) => res[p] !== PermissionsAndroid.RESULTS.GRANTED);
   // Location is optional on Android 12+ for Nearby; Bluetooth/nearby-devices are not.
-  const blocking = denied.filter((p) => v < 31 || p !== P.ACCESS_FINE_LOCATION);
+  // Location is optional on 12+; notifications only affect alerts (warned about in Help others).
+  const blocking = denied.filter((p) => (v < 31 || p !== P.ACCESS_FINE_LOCATION) && p !== P.POST_NOTIFICATIONS);
   return blocking.length ? `Permission needed: ${blocking.map((p) => p.split('.').pop()).join(', ')}` : null;
 }
 
@@ -110,6 +116,12 @@ function parseFrame(data: string): Frame | null {
     if (f.t === 'ACK' || f.t === 'STATUS') return typeof f.id === 'string' && isStatus(f.status) ? f : null;
     if (f.t === 'SOS') return f.msg && typeof f.msg === 'object' ? f : null;
     if (f.t === 'HELLO') return typeof f.node === 'string' ? f : null;
+    if (f.t === 'PEER_ACK') {
+      const a = f.ack;
+      return a && typeof a.message_id === 'string' && /^SM-[A-Za-z0-9-]{6,64}$/.test(a.message_id)
+        && typeof a.recipient_device_id === 'string' && a.recipient_device_id.length <= 64
+        && typeof a.acknowledged_at === 'string' && !isNaN(Date.parse(a.acknowledged_at)) ? f : null;
+    }
     return null;
   } catch {
     return null;
@@ -120,6 +132,7 @@ function applyStatus(id: string, status: SosStatus, by: string | null | undefine
   if (statusRank(status) <= statusRank(known.get(id))) return;
   known.set(id, status);
   applyAckStatus(id, { message_id: id, status, acknowledged_by: by ?? null, acknowledged_at: at ?? null }); // own SOS (no-op otherwise)
+  onResponderStatus(id, status); // an SOS alerting on this phone stops once a responder acts
   setRelayStatus(id, status); // copy held for someone else (no-op otherwise)
   log(`status ${id.slice(-8)} → ${status}`);
   void broadcast({ v: 1, t: 'STATUS', id, status, by, at }, from); // pass it on toward the sender
@@ -153,6 +166,19 @@ async function onMessage(endpointId: string, name: string | null, data: string) 
     return;
   }
   if (f.t === 'STATUS') applyStatus(f.id, f.status, f.by, f.at, endpointId);
+  if (f.t === 'PEER_ACK') {
+    const a = f.ack;
+    const added = queuePeerAck({ ...a, recipient_name: typeof a.recipient_name === 'string' ? a.recipient_name.slice(0, 80) : null,
+      recipient_user_id: typeof a.recipient_user_id === 'string' ? a.recipient_user_id.slice(0, 64) : null });
+    if (outboxStore.get().some((i) => i.message.message_id === a.message_id)) {
+      noteSeenBy(a.message_id, [{ device_id: a.recipient_device_id, name: a.recipient_name ?? null, acknowledged_at: a.acknowledged_at }], 'NEARBY');
+    }
+    if (added) {
+      log(`${a.recipient_device_id} acknowledged ${a.message_id.slice(-8)} on their phone`);
+      void broadcast(f, endpointId); // pass it on toward the sender and a gateway
+      void flushPeerAcks();
+    }
+  }
 }
 
 function onPeer(type: 'connected' | 'disconnected', endpointId: string, name: string | null) {
@@ -164,6 +190,7 @@ function onPeer(type: 'connected' | 'disconnected', endpointId: string, name: st
     void send(endpointId, { v: 1, t: 'HELLO', node: getSettings().deviceId, online: isOnline() });
     // Tell the newcomer every responder status we know, so a returning sender catches up.
     for (const [id, status] of known) if (statusRank(status) >= statusRank('DELIVERED')) void send(endpointId, { v: 1, t: 'STATUS', id, status });
+    for (const ack of peerAckOutbox()) void send(endpointId, { v: 1, t: 'PEER_ACK', ack }); // acknowledgements not yet at a gateway
     void pump();
   } else {
     patch({ peers });
@@ -181,6 +208,7 @@ async function pump() {
     // This phone can reach a gateway: deliver what others handed us, and bring
     // responder statuses back to the mesh.
     void forwardOnce();
+    void flushPeerAcks();
     if (peers.length && Date.now() - lastStatusPoll > STATUS_POLL_MS && activeRouteUrl()) {
       lastStatusPoll = Date.now();
       const client = gatewayAt(activeRouteUrl()!);
@@ -228,6 +256,7 @@ function subscribe() {
     void pump();
   });
   for (const r of relayStatuses()) if (isStatus(r.status)) known.set(r.message_id, r.status);
+  setMeshPeerAckSender((ack) => void broadcast({ v: 1, t: 'PEER_ACK', ack }));
 }
 
 export async function startMesh(): Promise<string | null> {
@@ -242,6 +271,9 @@ export async function startMesh(): Promise<string | null> {
     if (problem) { patch({ error: problem, running: false }); log(problem); return problem; }
     subscribe();
     await Nearby.start(`TM:${getSettings().deviceId}`);
+    // Keeps the process (and the Bluetooth link) alive with the screen off; Android shows
+    // a "Listening for nearby SOS" notification while it runs. Refusal is not fatal.
+    if (!Nearby.startService()) log('background listening not allowed by Android: works while TrackMate is open');
     patch({ running: true, error: null });
     log(`started as ${getSettings().deviceId}`);
     if (!timer) timer = setInterval(() => void pump(), PUMP_MS);
@@ -259,6 +291,7 @@ export async function startMesh(): Promise<string | null> {
 export async function stopMesh() {
   if (timer) clearInterval(timer);
   timer = null;
+  Nearby?.stopService();
   await Nearby?.stop().catch(() => {});
   patch({ running: false, peers: [] });
   log('stopped');

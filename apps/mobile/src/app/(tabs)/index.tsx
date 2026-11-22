@@ -93,7 +93,8 @@ export default function Home() {
         <Icon name="chevron_right" sf="chevron.right" tint="#FFFFFF" />
       </Pressable>
 
-      <Section title={trekker ? 'Your trek' : 'Your trip'}>
+      <Section title={trekker ? 'Your trek' : 'Your trip'}
+        action={<Button compact kind="tertiary" label="All journeys" onPress={() => router.push('/journeys')} />}>
         {featured ? (
           <Card onPress={() => router.push({ pathname: '/journey/[id]', params: { id: featured.journey.id } })} label={`Open ${featured.journey.title}`}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s }}>

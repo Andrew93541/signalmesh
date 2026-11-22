@@ -10,6 +10,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
 import * as SQLite from 'expo-sqlite';
 
+import { Nearby } from '../../modules/signalmesh-nearby';
+
 import { backoffDelay } from './backoff';
 import { CATEGORIES, PRIORITIES, type CheckinPayload, type SosMessage } from './contract';
 import { GatewayError, gateway, gatewayAt } from './gateway';
@@ -156,6 +158,8 @@ export function acceptSosMessage(m: any, from: string | null): Reply {
     'PENDING',
   );
   console.log(`[relay] stored ${relayed.message_id} from ${from}, path ${relayed.hops.join(' > ')}`);
+  // Wi-Fi relay deliveries alert this phone's user too (the mesh path raises its alert natively).
+  if (!from?.startsWith('mesh:')) Nearby?.handleIncomingSos(JSON.stringify(m), `wifi-relay:${from ?? 'unknown'}`);
   refresh();
   void forwardOnce();
   return [201, { message_id: relayed.message_id, status: 'RELAYED', duplicate: false, node_id: deviceId }];

@@ -87,3 +87,15 @@ class NodeHeartbeatIn(BaseModel):
     role: Literal["relay", "gateway", "sender"] = "relay"
     label: str | None = Field(default=None, max_length=80)
     queue_size: int = Field(default=0, ge=0)
+
+
+class PeerAckIn(BaseModel):
+    """A nearby TrackMate user acknowledged an SOS on their phone (not a responder acknowledgement)."""
+    model_config = ConfigDict(extra="ignore")
+    message_id: str = Field(pattern=r"^SM-[A-Za-z0-9-]{6,64}$")
+    recipient_device_id: NodeId
+    recipient_name: Name | None = None
+    recipient_user_id: str | None = Field(default=None, max_length=64)
+    acknowledged_at: str
+
+    _iso = field_validator("acknowledged_at")(_check_iso)

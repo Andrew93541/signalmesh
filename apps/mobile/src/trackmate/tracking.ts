@@ -13,6 +13,7 @@ import { createStore } from '@/lib/store';
 import { syncNow } from '@/lib/sync';
 
 import { distanceToCount, MAX_ACCURACY_M, type Fix } from './geo';
+import { getSafetyPrefs } from './safetyPrefs';
 import { getJourney, journeysDb as db, journeysStore, refreshJourneys, type Journey } from './journeys';
 
 export type { Fix } from './geo';
@@ -61,6 +62,10 @@ function onFix(journeyId: string, loc: Location.LocationObject) {
 
 async function startWatch(journeyId: string): Promise<boolean> {
   stopWatch();
+  if (!getSafetyPrefs().gps_during_trek) {
+    patch({ journeyId, gps: 'idle', error: 'GPS tracking during treks is off (Settings → Safety options). Time is still recorded.' });
+    return false;
+  }
   const perm = await Location.requestForegroundPermissionsAsync().catch(() => null);
   if (!perm || perm.status !== 'granted') {
     patch({ journeyId, gps: 'denied', error: 'Location permission is off. Tracking needs it to record your route.' });

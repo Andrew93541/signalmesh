@@ -19,12 +19,14 @@ export function isHttpsUrl(url: string): boolean {
 /**
  * Address set at build time vs. one saved on the phone. The build's address wins only
  * when the saved one is empty or a loopback (127.0.0.1 / localhost works only over a
- * USB cable to the Mac); anything the user typed is kept.
+ * USB cable to the Mac) or an old quick-tunnel address; anything else the user typed is kept.
  */
 export function preferBuiltAddress(saved: string | undefined | null, built: string | undefined | null): string {
   const s = (saved ?? '').trim();
   const b = (built ?? '').trim();
   if (!b) return s;
   if (!s || /^https?:\/\/(127\.\d+\.\d+\.\d+|localhost)(:\d+)?\/?$/i.test(s)) return b;
+  // Quick-tunnel addresses change every time the tunnel restarts: an old one is dead.
+  if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/i.test(s) && /\.trycloudflare\.com\/?$/i.test(b)) return b;
   return s;
 }

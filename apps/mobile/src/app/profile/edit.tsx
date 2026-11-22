@@ -11,7 +11,7 @@ import {
 } from '@/trackmate/auth';
 import { RELATIONSHIP_LABEL } from '@/trackmate/smsText';
 import { nameError } from '@/trackmate/validation';
-import { Banner, Button, Card, Chip, FormField, Icon, Row, Screen, Section, Txt, s } from '@/ui/kit';
+import { Banner, Button, Card, Chip, FormField, Icon, Row, Screen, Section, SwitchRow, Txt, s } from '@/ui/kit';
 import { color, space } from '@/ui/theme';
 
 const EXPERIENCES = Object.keys(EXPERIENCE_LABEL) as Experience[];
@@ -24,6 +24,10 @@ export default function EditProfile() {
   const [travel, setTravel] = useState(user?.travel_preferences ?? '');
   const [experience, setExperience] = useState<Experience | null>(user?.trekking_experience ?? null);
   const [intro, setIntro] = useState(user?.intro ?? '');
+  const [username, setUsername] = useState(user?.username ?? '');
+  const [interests, setInterests] = useState((user?.interests ?? []).join(', '));
+  const [home, setHome] = useState(user?.home_location ?? '');
+  const [showHome, setShowHome] = useState(!!user?.show_home_location);
   const [busy, setBusy] = useState<'save' | 'photo' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -36,7 +40,11 @@ export default function EditProfile() {
     if (nameProblem) return;
     setBusy('save'); setError(null); setSaved(false);
     try {
-      await updateProfile({ full_name: fullName.trim(), travel_preferences: travel.trim() || null, trekking_experience: experience, intro: intro.trim() || null });
+      await updateProfile({
+        full_name: fullName.trim(), travel_preferences: travel.trim() || null, trekking_experience: experience, intro: intro.trim() || null,
+        username: username.trim() || null, home_location: home.trim() || null, show_home_location: showHome,
+        interests: interests.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10),
+      });
       setSaved(true);
     } catch (e) {
       setError(msg(e));
@@ -85,6 +93,15 @@ export default function EditProfile() {
         <FormField label="Full name" value={fullName} onChange={(t) => { setFullName(t); setSaved(false); }} error={fullName ? nameProblem : undefined}
           autoComplete="name" autoCapitalize="words" />
 
+        <FormField label="Username" value={username} onChange={(t) => { setUsername(t.replace(/[^A-Za-z0-9_.]/g, '').toLowerCase()); setSaved(false); }}
+          placeholder="e.g. ravi.treks" hint="3–30 letters, numbers, dots or underscores. Shown on your posts." />
+        <FormField label="Travel interests" value={interests} onChange={(t) => { setInterests(t); setSaved(false); }} autoCapitalize="words"
+          placeholder="Sahyadri treks, camping, monsoon hikes" hint="Separate with commas. Up to 10." />
+        <FormField label="Home location" value={home} onChange={(t) => { setHome(t); setSaved(false); }} autoCapitalize="words" placeholder="e.g. Pune" />
+        <Card>
+          <SwitchRow title="Show home location on my profile" subtitle="Off: only you see it." value={showHome} onChange={(v) => { setShowHome(v); setSaved(false); }} />
+        </Card>
+
         <View style={{ gap: space.s }}>
           <Txt v="headline">Trekking experience</Txt>
           <View style={s.wrap} accessibilityRole="radiogroup">
@@ -99,8 +116,8 @@ export default function EditProfile() {
         </View>
 
         <View style={{ gap: space.xs }}>
-          <Txt v="headline">Short intro</Txt>
-          <TextInput accessibilityLabel="Short intro" style={[s.input, { minHeight: 96, textAlignVertical: 'top', paddingTop: 12 }]} multiline maxLength={500}
+          <Txt v="headline">Bio</Txt>
+          <TextInput accessibilityLabel="Bio" style={[s.input, { minHeight: 96, textAlignVertical: 'top', paddingTop: 12 }]} multiline maxLength={500}
             value={intro} onChangeText={(t) => { setIntro(t); setSaved(false); }} placeholder="A line or two about you" placeholderTextColor={color.text3} />
           <Txt v="footnote" c={color.text2}>{intro.length}/500</Txt>
         </View>

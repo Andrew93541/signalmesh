@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from signalmesh_gateway.config import Settings
-from signalmesh_gateway.main import create_app, forward_upstream_once, sync_once
+from signalmesh_gateway.main import create_app, forward_peer_acks_once, forward_upstream_once, sync_once
 from signalmesh_gateway.store import iso, utcnow
 
 
@@ -98,7 +98,8 @@ def test_validation_rejects_bad_input(client, bad):
 def test_scenario6_ack_reaches_ack_status_and_is_idempotent(client):
     client.post("/gateway/sos", json=sos())
     before = client.get("/gateway/ack-status/SM-test-0001").json()
-    assert before == {"message_id": "SM-test-0001", "status": "DELIVERED", "acknowledged_by": None, "acknowledged_at": None}
+    assert before == {"message_id": "SM-test-0001", "status": "DELIVERED", "acknowledged_by": None, "acknowledged_at": None,
+                      "seen_by": []}  # seen_by: additive (nearby acknowledgements)
 
     r = client.post("/gateway/ack/SM-test-0001", json={"acknowledged_by": "Meera Iyer"})
     assert r.status_code == 200 and r.json()["status"] == "ACKNOWLEDGED"
@@ -309,3 +310,53 @@ def test_old_database_gets_new_columns_without_losing_rows(tmp_path):
         old = c.get("/gateway/messages/SM-old-000001").json()
         assert old["status"] == "DELIVERED" and old["location_accuracy_m"] is None
         assert c.post("/gateway/sos", json=sos(**GPS)).status_code == 201
+
+
+# ---- nearby acknowledgements (recipient alert) --------------------------------------
+
+def peer_ack(mid="SM-test-0001", device="MOBILE_0DF5", **over):
+    body = {"message_id": mid, "recipient_device_id": device, "recipient_name": "Bina", "acknowledged_at": "2026-11-22T10:00:00.000Z"}
+    body.update(over)
+    return body
+
+
+def test_peer_ack_recorded_once_and_does_not_acknowledge_incident(client):
+    client.post("/gateway/sos", json=sos())
+    r = client.post("/gateway/peer-ack", json=peer_ack())
+    assert r.status_code == 201 and r.json()["status"] == "recorded" and r.json()["duplicate"] is False
+    again = client.post("/gateway/peer-ack", json=peer_ack(acknowledged_at="2026-11-22T10:05:00.000Z"))
+    assert again.status_code == 200 and again.json()["duplicate"] is True
+    a = client.get("/gateway/ack-status/SM-test-0001").json()
+    assert a["status"] == "DELIVERED" and a["acknowledged_by"] is None  # a nearby person is not a responder
+    assert a["seen_by"] == [{"device_id": "MOBILE_0DF5", "name": "Bina", "acknowledged_at": "2026-11-22T10:00:00.000Z"}]
+
+
+def test_peer_ack_before_sos_is_kept(client):
+    assert client.post("/gateway/peer-ack", json=peer_ack("SM-later-00001")).status_code == 201
+    client.post("/gateway/sos", json=sos("SM-later-00001"))
+    assert len(client.get("/gateway/ack-status/SM-later-00001").json()["seen_by"]) == 1
+
+
+@pytest.mark.parametrize("bad", [{"message_id": "nope"}, {"acknowledged_at": "yesterday"}, {"recipient_device_id": ""}])
+def test_peer_ack_validation(client, bad):
+    assert client.post("/gateway/peer-ack", json=peer_ack(**bad)).status_code == 422
+
+
+def test_peer_ack_forwarded_upstream_and_retried_until_backend_has_sos(db_path):
+    settings = Settings(db_path=db_path, upstream_url="http://backend", upstream_token="gw-secret", upstream_retry_seconds=3600, sync_seconds=3600)
+    app = create_app(settings)
+    store = app.state.store
+    calls = []
+
+    def not_yet(url, payload, token=None):
+        calls.append(url)
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+    with TestClient(app) as c:
+        c.post("/gateway/peer-ack", json=peer_ack())
+        assert asyncio.run(forward_peer_acks_once(store, settings, post=not_yet)) == 0
+        assert calls == ["http://backend/gateway/peer-ack"] and len(store.pending_peer_acks()) == 1  # kept for retry
+        got = []
+        assert asyncio.run(forward_peer_acks_once(store, settings, post=lambda url, p, token=None: got.append((p, token)) or (201, None))) == 1
+        assert got[0][1] == "gw-secret" and got[0][0]["recipient_device_id"] == "MOBILE_0DF5"
+        assert store.pending_peer_acks() == []

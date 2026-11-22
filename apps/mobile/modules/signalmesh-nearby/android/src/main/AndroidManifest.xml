@@ -10,4 +10,34 @@
   <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <!-- Receiving-side SOS alerts -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+  <!-- Health Connect: read only, the record types Analytics shows -->
+  <uses-permission android:name="android.permission.health.READ_STEPS" />
+  <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+  <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+  <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+  <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+  <queries>
+    <package android:name="com.google.android.apps.healthdata" />
+  </queries>
+  <application>
+    <!-- Health Connect shows TrackMate's privacy explanation from these (required to ask for access). -->
+    <activity-alias android:name="${applicationId}.HealthPermissionsRationale" android:exported="true" android:targetActivity="${applicationId}.MainActivity">
+      <intent-filter><action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" /></intent-filter>
+    </activity-alias>
+    <activity-alias android:name="${applicationId}.ViewPermissionUsageActivity" android:exported="true" android:targetActivity="${applicationId}.MainActivity"
+        android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+        <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+      </intent-filter>
+    </activity-alias>
+    <service android:name="expo.modules.signalmeshnearby.MeshService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+    <receiver android:name="expo.modules.signalmeshnearby.AckReceiver" android:exported="false" />
+  </application>
 </manifest>

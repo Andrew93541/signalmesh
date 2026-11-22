@@ -9,6 +9,7 @@ import { startRelay } from '@/lib/relay';
 import { getSettings } from '@/lib/settings';
 import { useStore } from '@/lib/store';
 import { initMesh } from '@/lib/mesh';
+import { initAlerts } from '@/lib/sosAlerts';
 import { startSync } from '@/lib/sync';
 import { restoreSession, sessionStore } from '@/trackmate/auth';
 import { prefsStore } from '@/trackmate/prefs';
@@ -33,6 +34,7 @@ export default function RootLayout() {
     // Ask up front so an SOS never waits on a permission prompt; then the nearby mesh
     // (its Bluetooth prompt must not overlap the location one).
     void ensureLocationPermission().finally(initMesh);
+    initAlerts(); // recipient SOS alerts: pop-up, acknowledgement delivery
     if (getSettings().relayEnabled) void startRelay(); // a relay phone resumes relaying after a restart
     resumeActiveTracking(); // a journey left ACTIVE keeps recording when the app reopens
     void restoreSession();
@@ -63,6 +65,19 @@ export default function RootLayout() {
 
             <Stack.Protected guard={onboardingDone && signedIn && mode !== null}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="journeys" options={{ title: 'Journeys' }} />
+              <Stack.Screen name="explore" options={{ title: 'Explore' }} />
+              <Stack.Screen name="post/new" options={{ title: 'New post', presentation: 'modal' }} />
+              <Stack.Screen name="post/[id]" options={{ title: 'Post' }} />
+              <Stack.Screen name="user/[id]" options={{ title: 'Profile' }} />
+              <Stack.Screen name="people" options={{ title: 'People' }} />
+              <Stack.Screen name="messages" options={{ title: 'Messages' }} />
+              <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
+              <Stack.Screen name="settings/index" options={{ title: 'Settings' }} />
+              <Stack.Screen name="settings/safety" options={{ title: 'Safety options' }} />
+              <Stack.Screen name="settings/blocked" options={{ title: 'Blocked users' }} />
+              <Stack.Screen name="plans" options={{ title: 'Plan & pricing' }} />
+              <Stack.Screen name="event/[id]" options={{ title: 'Event' }} />
               <Stack.Screen name="journey/new" options={{ title: 'New journey', presentation: 'modal' }} />
               <Stack.Screen name="journey/[id]" options={{ title: 'Journey' }} />
               <Stack.Screen name="sos/[id]" options={{ title: 'Your SOS' }} />
@@ -78,6 +93,8 @@ export default function RootLayout() {
             </Stack.Protected>
 
             {/* Always reachable */}
+            {/* Always reachable: an SOS alert must open whatever the sign-in state. */}
+            <Stack.Screen name="sos-alert/[id]" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
             <Stack.Screen name="legal/terms" options={{ title: 'Terms' }} />
             <Stack.Screen name="legal/privacy" options={{ title: 'Privacy' }} />
           </Stack>

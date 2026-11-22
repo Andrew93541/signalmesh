@@ -1,6 +1,7 @@
 import { Alert, View } from 'react-native';
 
 import { meshStore } from '@/lib/mesh';
+import { AlertSettings } from '@/ui/AlertSettings';
 import { clearRelayQueue, relayStore, startRelay, stopRelay, type RelayItemState } from '@/lib/relay';
 import { saveSettings, settingsStore } from '@/lib/settings';
 import { useStore } from '@/lib/store';
@@ -68,6 +69,10 @@ export default function HelpOthers() {
             {mesh.log.slice(0, 8).map((l, i) => <Txt key={i} v="caption" c={color.text2}>{l}</Txt>)}
           </Card>
         ) : null}
+      </Section>
+
+      <Section title="Nearby SOS alerts">
+        <AlertSettings />
       </Section>
 
       <Section title="Shared Wi-Fi or hotspot">

@@ -12,6 +12,7 @@ const EVENT_LABEL: Record<string, string> = {
   ACKNOWLEDGED: "Acknowledged",
   DISPATCHED: "Team dispatched",
   RESOLVED: "Resolved",
+  PEER_ACK: "Seen and acknowledged by a nearby TrackMate user (not a responder)",
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -161,6 +162,7 @@ export default function IncidentDetail({ params }: { params: Promise<{ id: strin
                     {e.actor ? <span className="text-muted">by {e.actor}</span> : null}
                     {e.detail && "team" in e.detail ? <span className="text-muted">· team {String(e.detail.team)}</span> : null}
                     {e.detail && "note" in e.detail && e.detail.note ? <span className="text-muted">· “{String(e.detail.note)}”</span> : null}
+                    {e.kind === "PEER_ACK" && e.detail ? <span className="text-muted">· device {String(e.detail.recipient_device_id)}, on their phone at {fmtTime(String(e.detail.acknowledged_at))}</span> : null}
                   </li>
                 ))}
               </ol>

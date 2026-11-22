@@ -15,6 +15,7 @@ export interface Settings {
   relayEnabled: boolean; // this phone also accepts and forwards other phones' SOS
   relayPort: number;
   meshEnabled: boolean; // nearby phone mesh (Bluetooth / Wi-Fi Direct), no shared network needed
+  shareCallNumber: boolean; // include my phone number in my SOS so nearby TrackMate users can call me
 }
 
 const KEY = 'settings';
@@ -31,6 +32,7 @@ const DEFAULTS: Settings = {
   relayEnabled: false,
   relayPort: 8080,
   meshEnabled: true,
+  shareCallNumber: false,
 };
 
 /** Every install needs its own device ID: it names this phone in hop paths and on the nearby mesh. */
